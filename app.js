@@ -12,7 +12,7 @@
   } catch (e) {}
 })();
 
-/* === 🌐 Navigation & UI Helper === */
+/* === 🌐 Navigation === */
 document.addEventListener('DOMContentLoaded', () => {
   const nav = document.getElementById('nav');
   const pages = document.querySelectorAll('.page');
@@ -25,17 +25,23 @@ document.addEventListener('DOMContentLoaded', () => {
       const id = btn.getAttribute('data-target');
       pages.forEach(p => p.classList.toggle('active', p.id === id));
       
-      // UI Refreshes beim Seitenwechsel
-      if(id === 'page-matchbox') { updateDropdowns(); renderMatchboxList(); }
-      if(id === 'page-nights') { renderNightsList(); }
+      if(id === 'page-matchbox') updateMatchboxDropdowns();
+      if(id === 'page-nights') renderTimeline();
     });
   }
 });
 
-function showOverlay() { document.getElementById('overlay')?.classList.add('show'); }
+function showOverlay() { 
+    const ov = document.getElementById('overlay');
+    if(ov) {
+        ov.classList.add('show');
+        ov.querySelector('.bar').style.width = "0%";
+        ov.querySelector('.overlay-title').textContent = "Berechnung läuft... (0%)";
+    }
+}
 function hideOverlay() { document.getElementById('overlay')?.classList.remove('show'); }
 
-/* === 👥 Teilnehmer-Verwaltung === */
+/* === 👥 Teilnehmer === */
 function createPerson(name, group) {
   const container = document.getElementById(group === "A" ? "listA" : "listB");
   if(!container) return;
@@ -52,6 +58,7 @@ function saveTeilnehmer() {
   const A = [...document.querySelectorAll("#listA input")].map(i => i.value.trim()).filter(Boolean);
   const B = [...document.querySelectorAll("#listB input")].map(i => i.value.trim()).filter(Boolean);
   localStorage.setItem("aytoTeilnehmer", JSON.stringify({ A, B }));
+  updateMatchboxDropdowns();
 }
 
 document.getElementById("addA")?.addEventListener("click", () => createPerson("", "A"));
@@ -65,137 +72,118 @@ document.getElementById("prefill")?.addEventListener("click", () => {
   B.forEach(n => createPerson(n, "B"));
 });
 
-/* === 💞 Matchbox Logik === */
-function updateDropdowns() {
+/* === 💞 Matchbox === */
+function updateMatchboxDropdowns() {
   const { A, B } = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
-  const selA = document.getElementById("selA"), selB = document.getElementById("selB");
+  const selA = document.getElementById("tbA"), selB = document.getElementById("tbB");
   if(!selA || !selB) return;
-  selA.innerHTML = '<option value="">-- A wählen --</option>' + A.map(n => `<option>${n}</option>`).join("");
-  selB.innerHTML = '<option value="">-- B wählen --</option>' + B.map(n => `<option>${n}</option>`).join("");
+  selA.innerHTML = A.map(n => `<option>${n}</option>`).join("");
+  selB.innerHTML = B.map(n => `<option>${n}</option>`).join("");
 }
 
-document.getElementById("addMBox")?.addEventListener("click", () => {
-  const a = document.getElementById("selA").value, b = document.getElementById("selB").value, t = document.getElementById("selType").value;
+document.getElementById("addTB")?.addEventListener("click", () => {
+  const a = document.getElementById("tbA").value, b = document.getElementById("tbB").value, t = document.getElementById("tbType").value;
   if(!a || !b) return;
   const list = JSON.parse(localStorage.getItem("aytoMatchbox") || '[]');
   list.push({ A: a, B: b, type: t });
   localStorage.setItem("aytoMatchbox", JSON.stringify(list));
-  renderMatchboxList();
+  renderTBList();
 });
 
-function renderMatchboxList() {
-  const container = document.getElementById("mboxList");
+function renderTBList() {
+  const container = document.getElementById("tbList");
   if(!container) return;
   const list = JSON.parse(localStorage.getItem("aytoMatchbox") || '[]');
   container.innerHTML = list.map((m, i) => `
-    <div class="row card" style="margin-bottom:5px">
-      <span style="flex:1">${m.A} × ${m.B}</span>
-      <span class="tag ${m.type === 'PM' ? 'good' : 'bad'}">${m.type}</span>
-      <button onclick="removeMBox(${i})" class="danger small">✖</button>
+    <div class="row card">
+      <span>${m.A} × ${m.B} <b>${m.type}</b></span>
+      <button onclick="removeTB(${i})" class="danger small">✖</button>
     </div>
   `).join("");
 }
-window.removeMBox = (i) => {
+window.removeTB = (i) => {
   const list = JSON.parse(localStorage.getItem("aytoMatchbox") || '[]');
   list.splice(i, 1);
   localStorage.setItem("aytoMatchbox", JSON.stringify(list));
-  renderMatchboxList();
+  renderTBList();
 };
 
-/* === 🌙 Matching Night Logik === */
+/* === 🌙 Matching Nights === */
 document.getElementById("addNight")?.addEventListener("click", () => {
   const { A, B } = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
-  if(!A.length || !B.length) return alert("Zuerst Teilnehmer anlegen!");
-
-  const nightContainer = document.getElementById("nights");
-  const div = document.createElement("div");
-  div.className = "card stack night-entry";
-  div.style.padding = "10px";
+  const nightDiv = document.createElement("div");
+  nightDiv.className = "card stack night-form";
   
-  let optionsB = B.map(n => `<option value="${n}">${n}</option>`).join("");
   let pairsHTML = A.map(nameA => `
-    <div class="row" style="margin-bottom:5px">
-      <label style="flex:1">${nameA}</label>
-      <select class="pair-sel" data-a="${nameA}" style="flex:1">
-        <option value="">-- Partner --</option>
+    <div class="row">
+      <label>${nameA}</label>
+      <select class="p-sel" data-a="${nameA}">
         <option value="NONE">Kein Partner</option>
-        ${optionsB}
+        ${B.map(nameB => `<option>${nameB}</option>`).join("")}
       </select>
     </div>
   `).join("");
 
-  div.innerHTML = `
-    <h4>Neue Matching Night</h4>
+  nightDiv.innerHTML = `
+    <h3>Night Konfiguration</h3>
     ${pairsHTML}
-    <div class="row" style="margin-top:10px; border-top:1px solid #444; padding-top:10px">
-      <label>Lichter (Beams):</label>
-      <input type="number" class="beam-count" min="0" max="${A.length}" value="0" style="width:60px">
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button class="primary small save-night-btn">Speichern</button>
-      <button class="ghost small" onclick="this.closest('.night-entry').remove()">Abbrechen</button>
-    </div>
+    <div class="row">Lichter: <input type="number" class="lights" value="0" min="0"></div>
+    <button class="primary save-n-btn">Speichern</button>
   `;
 
-  div.querySelector(".save-night-btn").onclick = () => {
-    const pairs = [...div.querySelectorAll(".pair-sel")].map(sel => ({
-      A: sel.dataset.a,
-      B: sel.value
-    })).filter(p => p.B && p.B !== "NONE");
-
-    const lights = div.querySelector(".beam-count").value;
-    const allNights = JSON.parse(localStorage.getItem("aytoMatchingNights") || '[]');
-    allNights.push({ pairs, lights: parseInt(lights) });
-    localStorage.setItem("aytoMatchingNights", JSON.stringify(allNights));
+  nightDiv.querySelector(".save-n-btn").onclick = () => {
+    const pairs = [...nightDiv.querySelectorAll(".p-sel")].map(s => ({ A: s.dataset.a, B: s.value })).filter(p => p.B !== "NONE");
+    const lights = nightDiv.querySelector(".lights").value;
+    const list = JSON.parse(localStorage.getItem("aytoNights") || '[]');
+    list.push({ pairs, lights });
+    localStorage.setItem("aytoNights", JSON.stringify(list));
+    nightDiv.remove();
     renderNightsList();
   };
-
-  nightContainer.prepend(div);
+  document.getElementById("nights").prepend(nightDiv);
 });
 
 function renderNightsList() {
-  const container = document.getElementById("nightsList") || document.getElementById("nights");
-  if(!container) return;
-  const list = JSON.parse(localStorage.getItem("aytoMatchingNights") || '[]');
-  container.innerHTML = list.map((n, i) => `
-    <div class="card stack" style="margin-bottom:10px">
-      <div class="row">
-        <strong>Night ${i+1}</strong>
-        <span class="tag good">${n.lights} Lichter</span>
-        <button onclick="removeNight(${i})" class="danger small">✖</button>
-      </div>
-      <div class="small muted">${n.pairs.map(p => `${p.A}×${p.B}`).join(", ")}</div>
-    </div>
-  `).join("");
+    const list = JSON.parse(localStorage.getItem("aytoNights") || '[]');
+    document.getElementById("nights").innerHTML = list.map((n, i) => `
+        <div class="card row">
+            <span>Night ${i+1}: ${n.lights} Lichter</span>
+            <button onclick="removeNight(${i})" class="danger small">✖</button>
+        </div>
+    `).join("");
 }
 window.removeNight = (i) => {
-  const list = JSON.parse(localStorage.getItem("aytoMatchingNights") || '[]');
-  list.splice(i, 1);
-  localStorage.setItem("aytoMatchingNights", JSON.stringify(list));
-  renderNightsList();
+    const list = JSON.parse(localStorage.getItem("aytoNights") || '[]');
+    list.splice(i, 1);
+    localStorage.setItem("aytoNights", JSON.stringify(list));
+    renderNightsList();
 };
 
-/* === 🧠 Web Worker Solver === */
+/* === 🕒 Timeline === */
+function renderTimeline() {
+    const box = document.getElementById("timelineBox");
+    const mbox = JSON.parse(localStorage.getItem("aytoMatchbox") || '[]');
+    const nights = JSON.parse(localStorage.getItem("aytoNights") || '[]');
+    box.innerHTML = "<h4>Verlauf</h4>";
+    mbox.forEach(m => box.innerHTML += `<div class="small">MB: ${m.A}x${m.B} (${m.type})</div>`);
+    nights.forEach((n, i) => box.innerHTML += `<div class="small">Night ${i+1}: ${n.lights} Beams</div>`);
+}
+
+/* === 🧠 Worker Solver === */
 const workerCode = `
 self.onmessage = function(e) {
   const { A, B, m, n, NONE_VAL, forced, forbidden, nights } = e.data;
   const noneQuota = Math.max(0, m - n);
-  let total = 0n;
-  const counts = Array.from({length: m}, () => Array(n).fill(0n));
-  const assign = Array(m).fill(-1);
-  const usedWoman = new Array(n).fill(false);
-  let usedNone = 0;
+  let total = 0n, counts = Array.from({length: m}, () => Array(n).fill(0n));
+  let assign = Array(m).fill(-1), usedW = new Array(n).fill(false), usedNone = 0;
 
   function prune() {
     for (const nt of nights) {
       let fixed = 0, could = 0;
       for (let i = 0; i < m; i++) {
-        const want = nt.map[i], a = assign[i];
-        if (a !== -1) {
-          if (a !== NONE_VAL && a === want) fixed++;
-        } else {
-          if (want !== NONE_VAL && !usedWoman[want] && !forbidden[i].includes(want)) could++;
-        }
+        let w = nt.map[i], a = assign[i];
+        if (a !== -1) { if (a !== NONE_VAL && a === w) fixed++; }
+        else { if (w !== NONE_VAL && !usedW[w] && !forbidden[i].includes(w)) could++; }
       }
       if (nt.beams < fixed || nt.beams > (fixed + could)) return false;
     }
@@ -204,100 +192,121 @@ self.onmessage = function(e) {
 
   function dfs(pos) {
     if (pos === m) {
-      if (usedNone === noneQuota) {
-        for (const nt of nights) {
-          let hits = 0;
-          for (let i = 0; i < m; i++) { if (assign[i] !== NONE_VAL && assign[i] === nt.map[i]) hits++; }
-          if (hits !== nt.beams) return false;
-        }
-        total++;
-        for (let i = 0; i < m; i++) { if (assign[i] !== NONE_VAL) counts[i][assign[i]]++; }
+      if (usedNone !== noneQuota) return;
+      for (const nt of nights) {
+        let hits = 0;
+        for (let i = 0; i < m; i++) { if (assign[i] !== NONE_VAL && assign[i] === nt.map[i]) hits++; }
+        if (hits !== nt.beams) return;
       }
+      total++;
+      for (let i = 0; i < m; i++) { if (assign[i] !== NONE_VAL) counts[i][assign[i]]++; }
       return;
     }
-    const possible = (forced[pos] !== -1) ? [forced[pos]] : [...Array(n).keys()].filter(j => !forbidden[pos].includes(j));
-    if (forced[pos] === -1 && noneQuota > 0) possible.push(NONE_VAL);
+    const opts = (forced[pos] !== -1) ? [forced[pos]] : [...Array(n).keys()].filter(j => !forbidden[pos].includes(j));
+    if (forced[pos] === -1 && noneQuota > 0) opts.push(NONE_VAL);
 
-    for (const j of possible) {
+    for (const j of opts) {
       if (j === NONE_VAL) {
-        if (usedNone < noneQuota) {
-          assign[pos] = NONE_VAL; usedNone++;
-          if (prune()) dfs(pos + 1);
-          usedNone--; assign[pos] = -1;
-        }
-      } else if (!usedWoman[j]) {
-        assign[pos] = j; usedWoman[j] = true;
-        if (prune()) dfs(pos + 1);
-        usedWoman[j] = false; assign[pos] = -1;
+        if (usedNone < noneQuota) { assign[pos] = NONE_VAL; usedNone++; if (prune()) dfs(pos + 1); usedNone--; assign[pos] = -1; }
+      } else if (!usedW[j]) {
+        assign[pos] = j; usedW[j] = true; if (prune()) dfs(pos + 1); usedW[j] = false; assign[pos] = -1;
       }
     }
   }
   dfs(0);
-  self.postMessage({ total: total.toString(), counts: counts });
+  self.postMessage({ total: total.toString(), counts });
 };`;
 
 document.getElementById("solveBtn")?.addEventListener("click", () => {
-  const dataA = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
-  const dataM = JSON.parse(localStorage.getItem("aytoMatchbox") || '[]');
-  const dataN = JSON.parse(localStorage.getItem("aytoMatchingNights") || '[]');
-  const { A, B } = dataA;
-  if (A.length < 2 || B.length < 2) return alert("Bitte Teilnehmer eintragen!");
+  const { A, B } = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
+  const mbox = JSON.parse(localStorage.getItem("aytoMatchbox") || '[]');
+  const nightsData = JSON.parse(localStorage.getItem("aytoNights") || '[]');
+  if (A.length < 2) return alert("Fehlende Daten!");
 
   showOverlay();
   const m = A.length, n = B.length, NONE_VAL = 99;
   const forced = Array(m).fill(-1), forbidden = Array.from({length: m}, () => []);
 
-  dataM.forEach(mBox => {
-    const ai = A.indexOf(mBox.A), bi = B.indexOf(mBox.B);
-    if (ai !== -1 && bi !== -1) (mBox.type === "PM") ? forced[ai] = bi : forbidden[ai].push(bi);
+  mbox.forEach(x => {
+    const ai = A.indexOf(x.A), bi = B.indexOf(x.B);
+    if (ai !== -1 && bi !== -1) (x.type === "PM") ? forced[ai] = bi : forbidden[ai].push(bi);
   });
 
-  const nights = dataN.map(night => {
+  const nights = nightsData.map(nd => {
     const map = Array(m).fill(NONE_VAL);
-    night.pairs.forEach(p => {
-      const ai = A.indexOf(p.A), bi = B.indexOf(p.B);
-      if (ai !== -1 && bi !== -1) map[ai] = bi;
-    });
-    return { map, beams: parseInt(night.lights), NONE_VAL };
+    nd.pairs.forEach(p => { const ai = A.indexOf(p.A), bi = B.indexOf(p.B); if (ai !== -1 && bi !== -1) map[ai] = bi; });
+    return { map, beams: parseInt(nd.lights) };
   });
 
-  const worker = new Worker(URL.createObjectURL(new Blob([workerCode], {type: 'text/javascript'})));
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  const worker = new Worker(URL.createObjectURL(blob));
+  
+  // Progress-Simulation
+  let p = 0; const iv = setInterval(() => { 
+      p = Math.min(98, p + 2); 
+      document.querySelector('.bar').style.width = p + "%";
+      document.querySelector('.overlay-title').textContent = `Berechnung läuft... (${p}%)`;
+  }, 150);
+
   worker.postMessage({ A, B, m, n, NONE_VAL, forced, forbidden, nights });
   worker.onmessage = (e) => {
+    clearInterval(iv);
     renderMatrix(BigInt(e.data.total), e.data.counts, A, B);
     hideOverlay();
-    worker.terminate();
   };
 });
 
 function renderMatrix(total, counts, A, B) {
   const container = document.getElementById("matrix");
-  const summary = document.getElementById("summary");
-  if(!container || !summary) return;
+  document.getElementById("summary").innerHTML = `<h3>${total.toString()} Kombinationen</h3>`;
+  if (total === 0n) return container.innerHTML = "Keine Lösung!";
 
-  summary.innerHTML = `<h3>${total.toString()} Möglichkeiten</h3>`;
-  if (total === 0n) return container.innerHTML = "<div class='card bad'>Keine Lösung möglich! Widerspruch in den Daten.</div>";
-
-  let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th>A\\B</th>${B.map(b => `<th>${b}</th>`).join("")}</tr>`;
-  A.forEach((nameA, i) => {
-    html += `<tr><td><strong>${nameA}</strong></td>`;
-    B.forEach((nameB, j) => {
+  let html = `<table class="ayto-table"><tr><th>A\\B</th>${B.map(b => `<th>${b}</th>`).join("")}</tr>`;
+  A.forEach((na, i) => {
+    html += `<tr><td><strong>${na}</strong></td>`;
+    B.forEach((nb, j) => {
       const p = Number((BigInt(counts[i][j]) * 10000n) / total) / 100;
-      const hue = p === 0 ? 0 : p === 100 ? 120 : p * 1.2;
-      const bg = `hsl(${hue}, 60%, 25%)`;
-      html += `<td style="background:${bg};color:white;text-align:center">${p.toFixed(1)}%</td>`;
+      html += `<td style="background:hsl(${p*1.2},60%,25%);color:white">${p.toFixed(1)}%</td>`;
     });
     html += "</tr>";
   });
-  container.innerHTML = html + "</table></div>";
+  container.innerHTML = html + "</table>";
 }
 
-/* === Initialisierung === */
+/* === Import / Export === */
+document.getElementById("exportBtn")?.addEventListener("click", () => {
+    const data = { 
+        t: localStorage.getItem("aytoTeilnehmer"),
+        m: localStorage.getItem("aytoMatchbox"),
+        n: localStorage.getItem("aytoNights")
+    };
+    const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "ayto_backup.json";
+    a.click();
+});
+
+document.getElementById("importBtn")?.addEventListener("click", () => document.getElementById("importFile").click());
+document.getElementById("importFile")?.addEventListener("change", (e) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const data = JSON.parse(ev.target.result);
+        localStorage.setItem("aytoTeilnehmer", data.t);
+        localStorage.setItem("aytoMatchbox", data.m);
+        localStorage.setItem("aytoNights", data.n);
+        location.reload();
+    };
+    reader.readAsText(e.target.files[0]);
+});
+
+document.getElementById("resetBtn")?.addEventListener("click", () => { if(confirm("Alles löschen?")) { localStorage.clear(); location.reload(); }});
+
+/* === Init === */
 window.onload = () => {
-  const saved = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
-  saved.A.forEach(n => createPerson(n, "A"));
-  saved.B.forEach(n => createPerson(n, "B"));
-  updateDropdowns();
-  renderMatchboxList();
+  const t = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
+  t.A.forEach(n => createPerson(n, "A"));
+  t.B.forEach(n => createPerson(n, "B"));
+  renderTBList();
   renderNightsList();
 };

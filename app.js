@@ -174,11 +174,14 @@ document.addEventListener("DOMContentLoaded", () => {
   initSolver();
 });
 
-/* === 📊 Web-Worker Solver mit Animation === */
+/* === 📊 Web-Worker Solver mit flüssiger 3s Animation === */
 function initSolver() {
-  const solveBtn = document.getElementById("solveBtn"), summaryBox = document.getElementById("summary"), matrixBox = document.getElementById("matrix");
+  const solveBtn = document.getElementById("solveBtn"), 
+        summaryBox = document.getElementById("summary"), 
+        matrixBox = document.getElementById("matrix");
   if(!solveBtn) return;
 
+  // Worker-Code bleibt gleich
   const workerCode = `
     self.onmessage = function(e) {
       const { A, B, M, Nraw } = e.data;
@@ -204,8 +207,19 @@ function initSolver() {
     const {A, B} = getT(); if(A.length < 2) return alert("Bitte Teilnehmer anlegen!");
     
     showOverlay();
+    const ov = document.getElementById('overlay');
+    const textEl = ov.querySelector('p') || ov.querySelector('div[style*="font-size"]'); 
     const startTime = Date.now();
     
+    // --- 🏃 Animation für die Prozente (0 bis 100 in 3s) ---
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+      progress += 2; // Erhöht den Wert schrittweise
+      if (progress <= 99) {
+        if(textEl) textEl.textContent = `Berechnung läuft... (${progress}%)`;
+      }
+    }, 50); // Alle 50ms ein Update
+
     const worker = new Worker(workerUrl);
     worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
     
@@ -215,6 +229,9 @@ function initSolver() {
         const delay = Math.max(0, 3000 - duration);
 
         setTimeout(() => {
+          clearInterval(progressInterval); // Animation stoppen
+          if(textEl) textEl.textContent = `Berechnung läuft... (100%)`;
+
           const total = BigInt(e.data.total), counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
           summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} gültige Kombinationen</div>`;
           
@@ -228,8 +245,10 @@ function initSolver() {
             });
             html += "</tr>";
           });
-          matrixBox.innerHTML = html + "</table></div>"; matrixBox.style.display="block";
-          hideOverlay(); worker.terminate();
+          matrixBox.innerHTML = html + "</table></div>"; 
+          matrixBox.style.display="block";
+          
+          setTimeout(() => { hideOverlay(); worker.terminate(); }, 200); // Ganz kurzer Moment bei 100% verweilen
         }, delay);
       }
     };

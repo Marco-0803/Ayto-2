@@ -212,13 +212,10 @@ function initSolver() {
       let total = 0n;
       let counts = Array.from({length:m},()=>Array(n).fill(0n));
       let currentAssign = Array(m).fill(-1);
-      
-      // Speicher für die Belegung der Männer
       let usedB = new Array(n).fill(0);
 
       function dfs(idxP, doubleMatchFound) {
         if(idxP === m) {
-          // Check Matching Nights
           for(const nt of nights) {
             let hits = 0;
             for(let i=0; i<m; i++) {
@@ -226,7 +223,6 @@ function initSolver() {
             }
             if(hits !== nt.beams) return;
           }
-          
           total++;
           for(let i=0; i<m; i++) {
             if(currentAssign[i] !== -1) counts[i][currentAssign[i]]++;
@@ -234,15 +230,11 @@ function initSolver() {
           return;
         }
 
-        // Mögliche Partner für die aktuelle Frau idxP durchgehen
         for(let j=0; j<n; j++) {
           if(forbidden[idxP].has(j)) continue;
           if(forced[idxP] !== -1 && forced[idxP] !== j) continue;
 
-          // Ein Mann darf nur dann ein zweites Mal gewählt werden, 
-          // wenn wir noch kein Doppel-Match in dieser Kombination vergeben haben.
           const isDouble = usedB[j] === 1;
-          
           if(usedB[j] === 0 || (isDouble && !doubleMatchFound)) {
             currentAssign[idxP] = j;
             usedB[j]++;
@@ -253,7 +245,6 @@ function initSolver() {
         }
       }
 
-      // Start der Berechnung: Jede Kombination muss genau EIN Doppel-Match enthalten
       dfs(0, false);
       self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString()))});
     };
@@ -273,27 +264,31 @@ function initSolver() {
       const total = BigInt(e.data.total);
       const counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
       
-      summaryBox.innerHTML = `<h3>Ergebnis</h3><div>\${total.toString()} gültige Kombinationen</div>`;
+      summaryBox.innerHTML = "<h3>Ergebnis</h3><div>" + total.toString() + " gültige Kombinationen</div>";
       
-      let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>\${B.map(b=>\`<th>\${b}</th>\`).join("")}</tr>`;
+      let html = '<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>';
+      // Spaltenköpfe (Männer)
+      B.forEach(nameB => { html += '<th>' + nameB + '</th>'; });
+      html += '</tr>';
       
-      A.forEach((na, i) => {
-        html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;z-index:2;font-weight:bold">\${na}</td>`;
-        B.forEach((nb, j) => {
+      // Zeilen (Frauen)
+      A.forEach((nameA, i) => {
+        html += '<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">' + nameA + '</td>';
+        B.forEach((nameB, j) => {
           const count = counts[i][j];
           const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
           
-          // Anzeige-Logik:
           if (p >= 100) {
-            html += `<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>`;
+            html += '<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>';
           } else if (count === 0n) {
-            html += `<td class="no-match" style="color:#444;font-size:10px;">No Match</td>`;
+            html += '<td class="no-match" style="color:#555;font-size:10px;">No Match</td>';
           } else {
-            // Die Wahrscheinlichkeit wird angezeigt, AUCH wenn sie woanders ein Match hat
-            html += `<td style="background:hsl(\${260-(p*2)},70%,\${20+p*0.3}%);color:white;text-align:center;font-size:11px;">\${p.toFixed(2)}%</td>`;
+            const hue = 260 - (p * 2);
+            const light = 20 + (p * 0.3);
+            html += '<td style="background:hsl(' + hue + ',70%,' + light + '%);color:white;text-align:center;font-size:11px;">' + p.toFixed(2) + '%</td>';
           }
         });
-        html += "</tr>";
+        html += '</tr>';
       });
       
       matrixBox.innerHTML = html + "</table></div>";

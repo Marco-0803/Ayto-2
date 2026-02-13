@@ -239,26 +239,30 @@ function initSolver() {
           
           let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
           
-         A.forEach((na, i) => {
+          A.forEach((na, i) => {
             html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
             
             B.forEach((nb, j) => {
+              // Wir holen den exakten mathematischen Count für dieses Paar
               const count = counts[i][j];
+              // Berechne die Prozent (basierend auf allen gültigen Kombinationen)
               const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
               
-              if (p === 100) {
-                // Ein sicheres Perfect Match
+              if (p >= 100) {
+                // Ein sicheres Perfect Match (kann Teil eines Double Shots sein)
                 html += `<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>`;
               } else if (count === 0n) {
-                // Nur wenn der mathematische Count wirklich 0 ist, ist es ein No Match
-                html += `<td class="no-match">No Match</td>`;
+                // NUR wenn der mathematische Count wirklich 0 ist, ist es ein No Match
+                html += `<td class="no-match" style="opacity: 0.5; font-size: 10px;">No Match</td>`;
               } else {
                 // Wahrscheinlichkeits-Farben (Hitzekarte)
-                html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;font-size:11px;">${p.toFixed(2)}%</td>`;
+                // HSL-Farbe: 260 (Blau) sinkt zu 60 (Gelb/Orange) bei höheren Prozenten
+                html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;font-size:11px;min-width:75px">${p.toFixed(2)}%</td>`;
               }
             });
             html += "</tr>";
           });
+
 
           matrixBox.innerHTML = html + "</table></div>";
 

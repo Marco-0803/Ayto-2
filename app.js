@@ -39,7 +39,6 @@ function showOverlay() {
     if(ov) {
         ov.classList.add('show');
         ov.querySelector('.bar').style.width = "0%";
-        ov.querySelector('.overlay-title').textContent = "Berechnung startet...";
     }
 }
 function hideOverlay() { document.getElementById('overlay')?.classList.remove('show'); }
@@ -115,8 +114,6 @@ window.removeTB = (i) => {
 /* === 🌙 Matching Night Logik === */
 document.getElementById("addNight")?.addEventListener("click", () => {
   const { A, B } = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
-  if(!A.length || !B.length) return alert("Zuerst Teilnehmer anlegen!");
-
   const nightContainer = document.getElementById("nights");
   const div = document.createElement("div");
   div.className = "card stack night-entry";
@@ -134,27 +131,23 @@ document.getElementById("addNight")?.addEventListener("click", () => {
   div.innerHTML = `
     <h4>Neue Matching Night</h4>
     ${pairsHTML}
-    <div class="row" style="margin-top:10px; border-top:1px solid #444; padding-top:10px">
-      <label>Lichter (Beams):</label>
-      <input type="number" class="beam-count" min="0" max="${A.length}" value="0" style="width:60px">
-    </div>
     <div class="row" style="margin-top:10px">
+      <label>Beams:</label>
+      <input type="number" class="beam-count" min="0" max="${A.length}" value="0">
+    </div>
+    <div class="row">
       <button class="primary small save-night-btn">Speichern</button>
       <button class="ghost small" onclick="this.closest('.night-entry').remove()">Abbrechen</button>
     </div>
   `;
 
   div.querySelector(".save-night-btn").onclick = () => {
-    const pairs = [...div.querySelectorAll(".pair-sel")].map(sel => ({
-      A: sel.dataset.a, B: sel.value
-    })).filter(p => p.B !== "NONE");
-
+    const pairs = [...div.querySelectorAll(".pair-sel")].map(sel => ({ A: sel.dataset.a, B: sel.value })).filter(p => p.B !== "NONE");
     const lights = div.querySelector(".beam-count").value;
     const allNights = JSON.parse(localStorage.getItem("aytoNights") || '[]');
     allNights.push({ pairs, lights: parseInt(lights) });
     localStorage.setItem("aytoNights", JSON.stringify(allNights));
     renderNightsList();
-    renderTimeline();
   };
   nightContainer.prepend(div);
 });
@@ -165,11 +158,7 @@ function renderNightsList() {
   const list = JSON.parse(localStorage.getItem("aytoNights") || '[]');
   container.innerHTML = list.map((n, i) => `
     <div class="card stack" style="margin-bottom:10px">
-      <div class="row">
-        <strong>Night ${i+1}</strong>
-        <span class="tag good">${n.lights} Lichter</span>
-        <button onclick="removeNight(${i})" class="danger small">✖</button>
-      </div>
+      <div class="row"><strong>Night ${i+1}</strong> <span class="tag good">${n.lights} Beams</span> <button onclick="removeNight(${i})" class="danger small">✖</button></div>
       <div class="small muted">${n.pairs.map(p => `${p.A}×${p.B}`).join(", ")}</div>
     </div>
   `).join("");
@@ -179,7 +168,6 @@ window.removeNight = (i) => {
   list.splice(i, 1);
   localStorage.setItem("aytoNights", JSON.stringify(list));
   renderNightsList();
-  renderTimeline();
 };
 
 /* === 🕒 Timeline === */
@@ -209,11 +197,8 @@ self.onmessage = function(e) {
       let fixed = 0, could = 0;
       for (let i = 0; i < m; i++) {
         const want = nt.map[i], a = assign[i];
-        if (a !== -1) {
-          if (a !== NONE_VAL && a === want) fixed++;
-        } else {
-          if (want !== NONE_VAL && !usedWoman[want] && !forbidden[i].includes(want)) could++;
-        }
+        if (a !== -1) { if (a !== NONE_VAL && a === want) fixed++; } 
+        else { if (want !== NONE_VAL && !usedWoman[want] && !forbidden[i].includes(want)) could++; }
       }
       if (nt.beams < fixed || nt.beams > (fixed + could)) return false;
     }
@@ -259,96 +244,74 @@ document.getElementById("solveBtn")?.addEventListener("click", () => {
   const dataM = JSON.parse(localStorage.getItem("aytoMatchbox") || '[]');
   const dataN = JSON.parse(localStorage.getItem("aytoNights") || '[]');
   const { A, B } = dataA;
-  if (A.length < 2) return alert("Bitte Teilnehmer eintragen!");
+  if (A.length < 2) return alert("Teilnehmer fehlen!");
 
   showOverlay();
-  const startTime = Date.now();
-  const m = A.length, n = B.length, NONE_VAL = 99;
-  const forced = Array(m).fill(-1), forbidden = Array.from({length: m}, () => []);
-
-  dataM.forEach(mBox => {
-    const ai = A.indexOf(mBox.A), bi = B.indexOf(mBox.B);
-    if (ai !== -1 && bi !== -1) (mBox.type === "PM") ? forced[ai] = bi : forbidden[ai].push(bi);
-  });
-
-  const nights = dataN.map(night => {
-    const map = Array(m).fill(NONE_VAL);
-    night.pairs.forEach(p => {
-      const ai = A.indexOf(p.A), bi = B.indexOf(p.B);
-      if (ai !== -1 && bi !== -1) map[ai] = bi;
-    });
-    return { map, beams: parseInt(night.lights), NONE_VAL };
-  });
-
+  const start = Date.now();
   const worker = new Worker(URL.createObjectURL(new Blob([workerCode], {type: 'text/javascript'})));
   
-  let currentProgress = 0;
-  const bar = document.querySelector('.bar');
-  const title = document.querySelector('.overlay-title');
+  worker.postMessage({ 
+    A, B, m: A.length, n: B.length, NONE_VAL: 99, 
+    forced: A.map((_, i) => {
+        const match = dataM.find(m => m.A === A[i] && m.type === "PM");
+        return match ? B.indexOf(match.B) : -1;
+    }),
+    forbidden: A.map((_, i) => dataM.filter(m => m.A === A[i] && m.type === "NO").map(m => B.indexOf(m.B))),
+    nights: dataN.map(n => ({
+        map: A.map(nameA => {
+            const p = n.pairs.find(pair => pair.A === nameA);
+            return p ? B.indexOf(p.B) : 99;
+        }),
+        beams: n.lights
+    }))
+  });
 
-  const iv = setInterval(() => {
-    if (currentProgress < 90) {
-      currentProgress += Math.random() * 15;
-      if (bar) bar.style.width = Math.min(90, currentProgress) + "%";
-      if (title) title.textContent = `Berechnung läuft... (${Math.floor(Math.min(90, currentProgress))}%)`;
-    }
-  }, 80);
-
-  worker.postMessage({ A, B, m, n, NONE_VAL, forced, forbidden, nights });
   worker.onmessage = (e) => {
-    const duration = Date.now() - startTime;
-    const minDelay = 600; // Mindestdauer der Animation in ms
-    const remainingDelay = Math.max(0, minDelay - duration);
-
-    setTimeout(() => {
-      clearInterval(iv);
-      if (bar) bar.style.width = "100%";
-      if (title) title.textContent = "Berechnung abgeschlossen (100%)";
-      
-      setTimeout(() => {
-        renderMatrix(BigInt(e.data.total), e.data.counts, A, B, duration);
-        hideOverlay();
-        worker.terminate();
-      }, 300);
-    }, remainingDelay);
+    renderMatrix(BigInt(e.data.total), e.data.counts, A, B, Date.now() - start);
+    hideOverlay();
+    worker.terminate();
   };
 });
 
 function renderMatrix(total, counts, A, B, duration) {
   const container = document.getElementById("matrix");
   const summary = document.getElementById("summary");
-  if(!container || !summary) return;
-
-  summary.innerHTML = `
-    <div class="card stack">
-      <h3>${total.toString()} Kombinationen gefunden</h3>
-      <div class="small muted" style="margin-bottom:10px">Berechnet in ${duration}ms</div>
-      <button id="pngExport" class="primary small">📸 Matrix als Bild speichern</button>
-    </div>
-  `;
+  summary.innerHTML = `<div class="card stack"><h3>${total.toString()} Kombinationen (${duration}ms)</h3><button id="pngExport" class="primary small">📸 PNG Export</button></div>`;
   
-  if (total === 0n) return container.innerHTML = "<div class='card bad'>Keine Lösung möglich! Widerspruch in den Daten.</div>";
+  if (total === 0n) return container.innerHTML = "<div class='card bad'>Keine Lösung möglich!</div>";
 
-  let html = `<div class="table-wrap"><table class="ayto-table" id="matrixTable"><thead><tr><th>A\\B</th>${B.map(b => `<th>${b}</th>`).join("")}</tr></thead><tbody>`;
+  let html = `<div class="table-wrap"><table class="ayto-table" id="matrixTable"><thead><tr><th>A\\B</th>${B.map((b, j) => `<th class="col-${j}">${b}</th>`).join("")}</tr></thead><tbody>`;
   
-  A.forEach((nameA, i) => {
-    html += `<tr><td class="name-cell"><strong>${nameA}</strong></td>`;
-    B.forEach((nameB, j) => {
+  A.forEach((na, i) => {
+    html += `<tr class="row-${i}"><td class="name-cell"><strong>${na}</strong></td>`;
+    B.forEach((nb, j) => {
       const p = Number((BigInt(counts[i][j]) * 10000n) / total) / 100;
-      let opacity = p === 0 ? 0.2 : 1;
-      const hue = Math.pow(p / 100, 1.5) * 120; 
-      const bg = p === 0 ? "rgba(0,0,0,0.1)" : `hsl(${hue}, 65%, 25%)`;
-      html += `<td style="background:${bg};color:${p === 0 ? '#666' : '#fff'};opacity:${opacity};text-align:center;font-weight:${p > 50 ? 'bold' : 'normal'}">${p > 0 ? p.toFixed(1) + "%" : "—"}</td>`;
+      const isNoMatch = p === 0;
+      const bg = isNoMatch ? "#2d2f3d" : `hsl(${Math.pow(p/100, 1.5)*120}, 65%, 25%)`;
+      html += `<td class="cell col-${j}" data-row="${i}" data-col="${j}" style="background:${bg}; color:${isNoMatch ? '#888' : '#fff'}; text-align:center; cursor:pointer;">${isNoMatch ? 'No Match' : p.toFixed(1)+'%'}</td>`;
     });
     html += "</tr>";
   });
   container.innerHTML = html + "</tbody></table></div>";
 
+  // Interaktive Klick-Logik
+  const table = document.getElementById("matrixTable");
+  table.addEventListener("click", (e) => {
+    const td = e.target.closest("td");
+    if (!td) return;
+    const rowIdx = td.parentElement.rowIndex - 1; 
+    const colIdx = td.classList.contains("cell") ? td.dataset.col : -1;
+
+    document.querySelectorAll(".ayto-table tr, .ayto-table td, .ayto-table th").forEach(el => el.classList.remove("highlight"));
+    
+    if (rowIdx >= 0) document.querySelector(`.row-${rowIdx}`)?.classList.add("highlight");
+    if (colIdx >= 0) document.querySelectorAll(`.col-${colIdx}`).forEach(el => el.classList.add("highlight"));
+  });
+
   document.getElementById("pngExport").onclick = () => {
-    const target = document.getElementById("page-ergebnisse");
-    html2canvas(target, { backgroundColor: "#191b2d", scale: 2 }).then(canvas => {
+    html2canvas(document.getElementById("page-ergebnisse"), { backgroundColor: "#191b2d", scale: 2 }).then(canvas => {
       const link = document.createElement("a");
-      link.download = `AYTO-Ergebnis-${new Date().getTime()}.png`;
+      link.download = `AYTO-Export.png`;
       link.href = canvas.toDataURL();
       link.click();
     });
@@ -357,34 +320,15 @@ function renderMatrix(total, counts, A, B, duration) {
 
 /* === Import / Export / Reset === */
 document.getElementById("exportBtn")?.addEventListener("click", () => {
-    const data = { 
-        t: localStorage.getItem("aytoTeilnehmer"),
-        m: localStorage.getItem("aytoMatchbox"),
-        n: localStorage.getItem("aytoNights")
-    };
+    const data = { t: localStorage.getItem("aytoTeilnehmer"), m: localStorage.getItem("aytoMatchbox"), n: localStorage.getItem("aytoNights") };
     const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "ayto_backup.json";
     a.click();
 });
+document.getElementById("resetBtn")?.addEventListener("click", () => { if(confirm("Löschen?")) { localStorage.clear(); location.reload(); }});
 
-document.getElementById("importBtn")?.addEventListener("click", () => document.getElementById("importFile").click());
-document.getElementById("importFile")?.addEventListener("change", (e) => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        const data = JSON.parse(ev.target.result);
-        localStorage.setItem("aytoTeilnehmer", data.t);
-        localStorage.setItem("aytoMatchbox", data.m);
-        localStorage.setItem("aytoNights", data.n);
-        location.reload();
-    };
-    reader.readAsText(e.target.files[0]);
-});
-
-document.getElementById("resetBtn")?.addEventListener("click", () => { if(confirm("Alles löschen?")) { localStorage.clear(); location.reload(); }});
-
-/* === Initialisierung === */
 window.onload = () => {
   const saved = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
   saved.A.forEach(n => createPerson(n, "A"));

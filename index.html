@@ -105,15 +105,17 @@
   </nav>
 
   <!-- ✅ Neuer Overlay-Bereich mit Prozentanzeige -->
-  <div id="overlay">
-    <div class="overlay-box">
-      <img class="overlay-logo" src="IMG_3538.png" alt="Are You The One Logo">
-      <h3 class="overlay-title">Berechnung läuft... (0%)</h3>
-      <div class="progress">
-        <div class="bar" style="width:0%;background:linear-gradient(90deg,#4af,#0fa);transition:width 0.3s ease"></div>
-      </div>
+<div id="overlay">
+  <div class="overlay-box">
+    <img class="overlay-logo" src="IMG_3538.png" alt="Are You The One Logo">
+    
+    <h3 id="progress-text" class="overlay-title">Berechnung läuft... (0%)</h3>
+    
+    <div class="progress">
+      <div class="bar" style="width: 0%; background: linear-gradient(90deg, #44aaff, #00ffaa); transition: width 0.3s ease;"></div>
     </div>
   </div>
+</div>
 
   <style>
   #overlay {

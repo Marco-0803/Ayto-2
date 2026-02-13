@@ -201,11 +201,12 @@ function initSolver() {
         } 
       });
 
+      // Die Matching Nights werden als einfache Zuordnung gespeichert
       const nights = Nraw.map(nObj => ({ 
-        map: A.map(name => { 
-          const p = nObj.pairs.find(pair => pair.A === name); 
-          return (p && p.B in idxB) ? idxB[p.B] : -1; 
-        }), 
+        pairs: nObj.pairs.map(p => ({
+          aIdx: idxA[p.A],
+          bIdx: idxB[p.B] // kann auch -1 sein, wenn 'keine'
+        })),
         beams: nObj.lights 
       }));
 
@@ -216,14 +217,19 @@ function initSolver() {
 
       function dfs(idxP, doubleWomanFound) {
         if(idxP === m) {
-          if (!doubleWomanFound) return; // Wir suchen nur Lösungen mit 11 Matches
-          
+          if (!doubleWomanFound) return;
+
+          // Check Matching Nights: Hier wird geschaut, ob die PMs der aktuellen Kombination 
+          // mit den Sitzplätzen der Nacht übereinstimmen
           for(const nt of nights) {
             let hits = 0;
-            for(let i=0; i<m; i++) {
-              // Eine Frau landet einen Treffer, wenn einer ihrer (1 oder 2) Partner 
-              // derjenige ist, der in der Matching Night neben ihr saß.
-              if(currentAssign[i].includes(nt.map[i])) hits++;
+            for(const pair of nt.pairs) {
+              if(pair.aIdx !== undefined && pair.bIdx !== -1) {
+                // Ein Licht geht an, wenn der Partner aus der Nacht einer der PM-Partner ist
+                if(currentAssign[pair.aIdx].includes(pair.bIdx)) {
+                  hits++;
+                }
+              }
             }
             if(hits !== nt.beams) return;
           }
@@ -234,23 +240,20 @@ function initSolver() {
           return;
         }
 
-        // Partner-Suche für Frau idxP
+        const forceJ = forced[idxP];
         for(let j=0; j<n; j++) {
           if(usedB[j] || forbidden[idxP].has(j)) continue;
-          if(forced[idxP] !== -1 && forced[idxP] !== j) continue;
+          if(forceJ !== -1 && forceJ !== j) continue;
 
-          // 1. Möglichkeit: Normales Match
+          // Normales Match
           usedB[j] = true;
           currentAssign[idxP].push(j);
           dfs(idxP + 1, doubleWomanFound);
           
-          // 2. Möglichkeit: Diese Frau nimmt einen ZWEITEN Partner (Double Shot)
+          // Double-Shot Match (Nur wenn diese Frau noch nicht als Double-Shot definiert wurde)
           if (!doubleWomanFound) {
             for(let k = j + 1; k < n; k++) {
               if(usedB[k] || forbidden[idxP].has(k)) continue;
-              // Ein PM aus der Matchbox darf nicht durch einen Double Shot "überschrieben" werden,
-              // es sei denn einer der Partner ist der forced partner.
-              
               usedB[k] = true;
               currentAssign[idxP].push(k);
               dfs(idxP + 1, true);
@@ -259,7 +262,6 @@ function initSolver() {
             }
           }
 
-          // Backtracking
           currentAssign[idxP].pop();
           usedB[j] = false;
         }
@@ -274,7 +276,7 @@ function initSolver() {
   const workerUrl = URL.createObjectURL(blob);
 
   solveBtn.onclick = () => {
-    const {A, B} = getT(); if(A.length < 2) return alert("Daten fehlen!");
+    const {A, B} = getT(); if(A.length < 2) return alert("Daten unvollständig!");
     showOverlay();
     const worker = new Worker(workerUrl);
     worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
@@ -282,7 +284,7 @@ function initSolver() {
     worker.onmessage = (e) => {
       const total = BigInt(e.data.total);
       const counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
-      summaryBox.innerHTML = "<h3>Ergebnis</h3><div>" + total.toString() + " Kombinationen gefunden</div>";
+      summaryBox.innerHTML = "<h3>Ergebnis</h3><div>" + (total === 0n ? "Keine Kombination gefunden" : total.toString() + " Kombinationen") + "</div>";
       
       let html = '<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>';
       B.forEach(nameB => { html += '<th>' + nameB + '</th>'; });
@@ -299,7 +301,7 @@ function initSolver() {
           } else if (count === 0n) {
             html += '<td class="no-match" style="color:#444;font-size:10px;">No Match</td>';
           } else {
-            const hue = 260 - (p * 2);
+            const hue = 260 - (p * 2.5);
             html += '<td style="background:hsl(' + hue + ',70%,25%);color:white;text-align:center;font-size:11px;">' + p.toFixed(2) + '%</td>';
           }
         });

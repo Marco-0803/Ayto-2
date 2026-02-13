@@ -12,7 +12,7 @@
   } catch (e) {}
 })();
 
-/* === 🌐 Navigation === */
+/* === 🌐 Navigation & UI Helper === */
 document.addEventListener('DOMContentLoaded', () => {
   const nav = document.getElementById('nav');
   const pages = document.querySelectorAll('.page');
@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('active');
       const id = btn.getAttribute('data-target');
       pages.forEach(p => p.classList.toggle('active', p.id === id));
+      
       if(id === 'page-matchbox') updateMatchboxDropdowns();
       if(id === 'page-nights') renderNightsList();
     });
@@ -40,7 +41,7 @@ function showOverlay() {
 }
 function hideOverlay() { document.getElementById('overlay')?.classList.remove('show'); }
 
-/* === 👥 Teilnehmer === */
+/* === 👥 Teilnehmer-Verwaltung === */
 function createPerson(name, group) {
   const container = document.getElementById(group === "A" ? "listA" : "listB");
   if(!container) return;
@@ -70,7 +71,7 @@ document.getElementById("prefill")?.addEventListener("click", () => {
   B.forEach(n => createPerson(n, "B"));
 });
 
-/* === 💞 Matchbox === */
+/* === 💞 Matchbox Logik === */
 function updateMatchboxDropdowns() {
   const { A, B } = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
   const selA = document.getElementById("tbA"), selB = document.getElementById("tbB");
@@ -107,7 +108,7 @@ window.removeTB = (i) => {
   renderTBList();
 };
 
-/* === 🌙 Matching Night === */
+/* === 🌙 Matching Night Logik === */
 document.getElementById("addNight")?.addEventListener("click", () => {
   const { A, B } = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
   const nightContainer = document.getElementById("nights");
@@ -123,11 +124,12 @@ document.getElementById("addNight")?.addEventListener("click", () => {
     </div>
   `).join("");
   div.innerHTML = `<h4>Neue Night</h4>${pairsHTML}<div class="row">Lichter: <input type="number" class="beam-count" value="0"></div>
-    <button class="primary small save-night-btn">Speichern</button>`;
+    <button class="primary small save-night-btn" style="margin-top:10px">Night Speichern</button>`;
+  
   div.querySelector(".save-night-btn").onclick = () => {
     const pairs = [...div.querySelectorAll(".pair-sel")].map(sel => ({ A: sel.dataset.a, B: sel.value })).filter(p => p.B !== "NONE");
     const allNights = JSON.parse(localStorage.getItem("aytoNights") || '[]');
-    allNights.push({ pairs, lights: parseInt(div.querySelector(".beam-count").value) });
+    allNights.push({ pairs, lights: parseInt(div.querySelector(".beam-count").value) || 0 });
     localStorage.setItem("aytoNights", JSON.stringify(allNights));
     renderNightsList();
   };
@@ -138,7 +140,12 @@ function renderNightsList() {
   const container = document.getElementById("nights");
   if(!container) return;
   const list = JSON.parse(localStorage.getItem("aytoNights") || '[]');
-  container.innerHTML = list.map((n, i) => `<div class="card">Night ${i+1}: ${n.lights} Beams <button onclick="removeNight(${i})" class="danger small">✖</button></div>`).join("");
+  container.innerHTML = list.map((n, i) => `
+    <div class="card row" style="justify-content:space-between">
+      <span><strong>Night ${i+1}</strong>: ${n.lights} Beams</span>
+      <button onclick="removeNight(${i})" class="danger small">✖</button>
+    </div>
+  `).join("");
 }
 window.removeNight = (i) => {
   const list = JSON.parse(localStorage.getItem("aytoNights") || '[]');
@@ -147,7 +154,7 @@ window.removeNight = (i) => {
   renderNightsList();
 };
 
-/* === 🧠 Solver Worker Code === */
+/* === 🧠 Solver Web Worker === */
 const workerCode = `
 self.onmessage = function(e) {
   const { A, B, m, n, NONE_VAL, forced, forbidden, nights } = e.data;
@@ -173,9 +180,9 @@ self.onmessage = function(e) {
 
   function dfs(pos) {
     if (pos === m) {
-        total++;
-        for (let i = 0; i < m; i++) { if (assign[i] !== NONE_VAL) counts[i][assign[i]]++; }
-        return;
+      total++;
+      for (let i = 0; i < m; i++) { if (assign[i] !== NONE_VAL) counts[i][assign[i]]++; }
+      return;
     }
     const possible = (forced[pos] !== -1) ? [forced[pos]] : [...Array(n).keys()].filter(j => !forbidden[pos].includes(j));
     if (forced[pos] === -1 && noneQuota > 0) possible.push(NONE_VAL);
@@ -198,11 +205,11 @@ self.onmessage = function(e) {
   self.postMessage({ total: total.toString(), counts: counts });
 };`;
 
-/* === 🚀 Solve & Render === */
+/* === 🚀 Berechnung & Rendering === */
 document.getElementById("solveBtn")?.addEventListener("click", () => {
   const dataA = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
   const { A, B } = dataA;
-  if (A.length < 2) return alert("Zuerst Teilnehmer anlegen!");
+  if (A.length < 2) return alert("Bitte zuerst Teilnehmer unter 'Teilnehmer' anlegen!");
 
   showOverlay();
   const start = Date.now();
@@ -232,6 +239,8 @@ function renderMatrix(total, counts, A, B, duration) {
   const summary = document.getElementById("summary");
   if(!container || !summary) return;
 
+  const matchboxData = JSON.parse(localStorage.getItem("aytoMatchbox") || '[]');
+
   // 1. Top 3 berechnen
   let matches = [];
   A.forEach((na, i) => B.forEach((nb, j) => {
@@ -244,17 +253,16 @@ function renderMatrix(total, counts, A, B, duration) {
   // 2. Summary & Top 3 HTML
   summary.innerHTML = `
     <div class="stack">
-      <div class="card row" style="justify-content:space-between">
-        <strong>${total.toString()} Kombinationen</strong>
-        <span class="small muted">${duration}ms</span>
-        <button id="pngExport" class="primary small">📸 Export</button>
+      <div class="card row" style="justify-content:space-between; background: rgba(52, 111, 255, 0.1);">
+        <span><strong>${total.toString()}</strong> Kombinationen</span>
+        <button id="pngExport" class="primary small">📸 Export PNG</button>
       </div>
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px;">
         ${top3.map((m, i) => `
-          <div class="card" style="border-left: 4px solid #0fa">
+          <div class="card" style="border-left: 4px solid ${m.p === 100 ? '#0fa' : '#346fff'}; margin-bottom:0">
             <div class="small muted">#${i+1} Match</div>
-            <div style="font-size:13px; font-weight:bold; margin:5px 0">${m.a} & ${m.b}</div>
-            <div style="color:#0fa; font-weight:bold">${m.p.toFixed(1)}%</div>
+            <div style="font-weight:bold; margin:4px 0">${m.a} & ${m.b}</div>
+            <div style="color:${m.p === 100 ? '#0fa' : '#fff'}; font-weight:bold">${m.p.toFixed(1)}% ${m.p === 100 ? '⭐' : ''}</div>
           </div>
         `).join("")}
       </div>
@@ -267,35 +275,44 @@ function renderMatrix(total, counts, A, B, duration) {
     tableHtml += `<tr class="row-${i}"><td class="name-cell"><strong>${na}</strong></td>`;
     B.forEach((nb, j) => {
       const p = Number((BigInt(counts[i][j]) * 10000n) / total) / 100;
-      const isNo = p === 0;
-      const bg = isNo ? "#2d2f3d" : `hsl(${Math.pow(p/100, 1.5)*120}, 65%, 25%)`;
-      tableHtml += `<td class="cell col-${j}" data-row="${i}" data-col="${j}" style="background:${bg} !important; color:${isNo ? '#666' : '#fff'}; text-align:center; cursor:pointer;">${isNo ? 'No Match' : p.toFixed(1)+'%'}</td>`;
+      const isManualNo = matchboxData.some(m => m.A === na && m.B === nb && m.type === "NO");
+      const isNoMatch = (p === 0 || isManualNo);
+      
+      const bg = isNoMatch ? "#2d2f3d" : `hsl(${Math.pow(p/100, 1.5)*120}, 65%, 25%)`;
+      
+      tableHtml += `
+        <td class="cell col-${j}" data-row="${i}" data-col="${j}" 
+            style="background:${bg} !important; color:${isNoMatch ? '#666' : '#fff'}; text-align:center; cursor:pointer;">
+          ${isNoMatch ? '<span style="font-size:0.7rem">No Match</span>' : '<strong>'+p.toFixed(1)+'%</strong>'}
+        </td>`;
     });
     tableHtml += "</tr>";
   });
   container.innerHTML = tableHtml + "</tbody></table></div>";
 
-  // 4. Klick-Logik
-  document.getElementById("matrixTable").onclick = (e) => {
+  // 4. Interaktive Highlighting Logik
+  const table = document.getElementById("matrixTable");
+  table.onclick = (e) => {
     const td = e.target.closest("td");
     if(!td) return;
     document.querySelectorAll(".highlight").forEach(el => el.classList.remove("highlight"));
-    const r = td.parentElement.rowIndex - 1, c = td.dataset.col;
+    const r = td.parentElement.rowIndex - 1;
+    const c = td.dataset.col;
     if(r >= 0) document.querySelector(`.row-${r}`).classList.add("highlight");
     if(c) document.querySelectorAll(`.col-${c}`).forEach(el => el.classList.add("highlight"));
   };
 
   document.getElementById("pngExport").onclick = () => {
-    html2canvas(document.getElementById("page-ergebnisse"), { backgroundColor: "#0e0f1a" }).then(canvas => {
+    html2canvas(document.getElementById("page-ergebnisse"), { backgroundColor: "#0e0f1a", scale: 2 }).then(canvas => {
       const link = document.createElement("a");
-      link.download = "AYTO-Ergebnis.png";
+      link.download = `AYTO-Analyse.png`;
       link.href = canvas.toDataURL();
       link.click();
     });
   };
 }
 
-/* === Init === */
+/* === Initialisierung === */
 window.onload = () => {
   const saved = JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[],"B":[]}');
   saved.A.forEach(n => createPerson(n, "A"));

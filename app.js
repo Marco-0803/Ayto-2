@@ -179,7 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 }); // <-- Hier endet der DOMContentLoaded-Block jetzt SAUBER.
 
-/* === 📊 Solver-Funktion (außerhalb definiert) === */
+/* === 📊 Solver mit Double-Shot Logik === */
 function initSolver() {
   const solveBtn = document.getElementById("solveBtn"), 
         summaryBox = document.getElementById("summary"), 
@@ -190,17 +190,77 @@ function initSolver() {
     self.onmessage = function(e) {
       const { A, B, M, Nraw } = e.data;
       const idxA = Object.fromEntries(A.map((n,i)=>[n,i])), idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
-      const m = A.length, n = B.length, NONE = n;
-      const forced = Array(m).fill(-1), forbidden = Array.from({length:m},()=>new Set());
-      M.forEach(t => { if(t.A in idxA && t.B in idxB) { if(t.type==="PM") forced[idxA[t.A]] = idxB[t.B]; else if(t.type==="NM") forbidden[idxA[t.A]].add(idxB[t.B]); } });
-      const nights = Nraw.map(nObj => ({ map: A.map(name => { const p = nObj.pairs.find(pair => pair.A === name); return (p && p.B in idxB) ? idxB[p.B] : NONE; }), beams: nObj.lights }));
-      const noneQuota = Math.max(0, m - n), dom = A.map((_,i) => { if(forced[i]!==-1) return new Set([forced[i]]); let s = new Set([...Array(n).keys()].filter(j => !forbidden[i].has(j))); if(noneQuota > 0) s.add(NONE); return s; });
-      const order = [...Array(m).keys()].sort((a,b)=>dom[a].size-dom[b].size);
-      const usedB = new Array(n).fill(false);
-      let usedNone = 0, total = 0n, assign = Array(m).fill(-1), counts = Array.from({length:m},()=>Array(n).fill(0n));
-      function prune() { for(const nt of nights) { let hits = 0, could = 0; for(let i=0; i<m; i++){ const target = nt.map[i], current = assign[i]; if(current !== -1) { if(current !== NONE && current === target) hits++; } else if(target !== NONE && !usedB[target] && dom[i].has(target)) could++; } if(nt.beams < hits || nt.beams > (hits + could)) return false; } return true; }
-      function dfs(pos) { if(pos === m) { if (usedNone === noneQuota) { total++; for(let i=0; i<m; i++) { if(assign[i]<n) counts[i][assign[i]]++; } } return; } const i = order[pos]; for(const j of dom[i]) { if(j===NONE) { if(usedNone < noneQuota) { assign[i]=NONE; usedNone++; if(prune()) dfs(pos+1); assign[i]=-1; usedNone--; } } else { if(!usedB[j]) { assign[i]=j; usedB[j]=true; if(prune()) dfs(pos+1); assign[i]=-1; usedB[j]=false; } } } }
-      dfs(0); self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString()))});
+      const m = A.length, n = B.length;
+      
+      // Matches & No Matches aus Matchbox
+      const forced = Array(m).fill(-1);
+      const forbidden = Array.from({length:m},()=>new Set());
+      M.forEach(t => { 
+        if(t.A in idxA && t.B in idxB) { 
+          if(t.type==="PM") forced[idxA[t.A]] = idxB[t.B]; 
+          else if(t.type==="NM") forbidden[idxA[t.A]].add(idxB[t.B]); 
+        } 
+      });
+
+      // Matching Nights aufbereiten
+      const nights = Nraw.map(nObj => ({ 
+        map: A.map(name => { 
+          const p = nObj.pairs.find(pair => pair.A === name); 
+          return (p && p.B in idxB) ? idxB[p.B] : -1; 
+        }), 
+        beams: nObj.lights 
+      }));
+
+      let total = 0n;
+      let counts = Array.from({length:m},()=>Array(n).fill(0n));
+      let currentAssign = Array(m).fill(-1);
+      let usedB = new Array(n).fill(0);
+
+      function dfs(idxP) {
+        if(idxP === m) {
+          // Check Matching Nights
+          for(const nt of nights) {
+            let hits = 0;
+            for(let i=0; i<m; i++) {
+              if(currentAssign[i] !== -1 && currentAssign[i] === nt.map[i]) hits++;
+            }
+            if(hits !== nt.beams) return;
+          }
+          
+          total++;
+          for(let i=0; i<m; i++) {
+            if(currentAssign[i] !== -1) counts[i][currentAssign[i]]++;
+          }
+          return;
+        }
+
+        // Wenn für diese Frau ein PM existiert
+        if(forced[idxP] !== -1) {
+          const j = forced[idxP];
+          currentAssign[idxP] = j;
+          usedB[j]++;
+          dfs(idxP + 1);
+          usedB[j]--;
+          return;
+        }
+
+        for(let j=0; j<n; j++) {
+          if(forbidden[idxP].has(j)) continue;
+          
+          // Double-Shot Logik: Ein Mann darf maximal 2 Frauen haben, 
+          // aber insgesamt darf nur EIN Mann 2 Frauen haben (bei 11 Frauen, 10 Männern)
+          let doubles = usedB.filter(v => v > 1).length;
+          if(usedB[j] === 0 || (usedB[j] === 1 && doubles === 0)) {
+            currentAssign[idxP] = j;
+            usedB[j]++;
+            dfs(idxP + 1);
+            usedB[j]--;
+          }
+        }
+      }
+
+      dfs(0);
+      self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString()))});
     };
   `;
 
@@ -209,68 +269,42 @@ function initSolver() {
 
   solveBtn.onclick = () => {
     const {A, B} = getT(); if(A.length < 2) return alert("Bitte Teilnehmer anlegen!");
+    showOverlay();
     
-    showOverlay(); 
     const textEl = document.getElementById('progress-text');
-    const startTime = Date.now();
-    let currentPercent = 0;
-
-    const progressInterval = setInterval(() => {
-      if (currentPercent < 99) {
-        currentPercent += 1;
-        if (textEl) textEl.textContent = `Berechnung läuft... (${currentPercent}%)`;
-      }
-    }, 28);
-
     const worker = new Worker(workerUrl);
     worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
     
     worker.onmessage = (e) => {
-      if(e.data.type === 'result') {
-        const duration = Date.now() - startTime;
-        const delay = Math.max(0, 3000 - duration);
-
-        setTimeout(() => {
-          clearInterval(progressInterval);
-          if (textEl) textEl.textContent = `Berechnung läuft... (100%)`;
-
-          const total = BigInt(e.data.total), counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
-          summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} gültige Kombinationen</div>`;
+      const total = BigInt(e.data.total);
+      const counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
+      
+      summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} Kombinationen</div>`;
+      
+      let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
+      
+      A.forEach((na, i) => {
+        html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;z-index:2">${na}</td>`;
+        B.forEach((nb, j) => {
+          const count = counts[i][j];
+          const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
           
-          let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
-          
-          A.forEach((na, i) => {
-            html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
-            
-            B.forEach((nb, j) => {
-              // Wir holen den exakten mathematischen Count für dieses Paar
-              const count = counts[i][j];
-              // Berechne die Prozent (basierend auf allen gültigen Kombinationen)
-              const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
-              
-              if (p >= 100) {
-                // Ein sicheres Perfect Match (kann Teil eines Double Shots sein)
-                html += `<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>`;
-              } else if (count === 0n) {
-                // NUR wenn der mathematische Count wirklich 0 ist, ist es ein No Match
-                html += `<td class="no-match" style="opacity: 0.5; font-size: 10px;">No Match</td>`;
-              } else {
-                // Wahrscheinlichkeits-Farben (Hitzekarte)
-                // HSL-Farbe: 260 (Blau) sinkt zu 60 (Gelb/Orange) bei höheren Prozenten
-                html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;font-size:11px;min-width:75px">${p.toFixed(2)}%</td>`;
-              }
-            });
-            html += "</tr>";
-          });
-
-
-          matrixBox.innerHTML = html + "</table></div>";
-
-          matrixBox.style.display="block";
-          
-          setTimeout(() => { hideOverlay(); worker.terminate(); }, 200);
-        }, delay);
-      }
+          if (p >= 100) {
+            html += `<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>`;
+          } else if (count === 0n) {
+            // No Match nur, wenn es mathematisch unmöglich ist
+            html += `<td class="no-match" style="color:#555;font-size:10px;">No Match</td>`;
+          } else {
+            html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;">${p.toFixed(2)}%</td>`;
+          }
+        });
+        html += "</tr>";
+      });
+      
+      matrixBox.innerHTML = html + "</table></div>";
+      matrixBox.style.display = "block";
+      hideOverlay();
+      worker.terminate();
     };
   };
 }

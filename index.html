@@ -4,153 +4,66 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AYTO Solver 2026</title>
-    <meta name="app-version" content="1.1.0">
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    
     <style>
-        :root {
-            --bg: #0e101f;
-            --card: #1e213c;
-            --primary: #346fff;
-            --danger: #ff4757;
-            --success: #00d2d3;
-            --text: #ffffff;
-            --muted: #a4b0be;
-        }
-
+        :root { --bg: #0e101f; --card: #1e213c; --primary: #346fff; --danger: #ff4757; --text: #fff; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-            background: var(--bg); color: var(--text); margin: 0; padding-bottom: 70px; 
-            overflow-x: hidden;
-        }
-
-        /* Header & Logo */
-        header {
-            background: linear-gradient(135deg, #ff00cc, #3333ff);
-            padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-        .logo-box {
-            background: white; width: 80px; height: 80px; margin: 0 auto 10px;
-            display: flex; align-items: center; justify-content: center; border-radius: 8px;
-        }
-        .logo-box img { width: 70px; }
-
-        /* Layout Container */
-        .container { padding: 15px; max-width: 1200px; margin: 0 auto; }
-        .page { display: none; animation: fadeIn 0.3s ease; }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding-bottom: 80px; }
+        header { background: linear-gradient(135deg, #ff00cc, #3333ff); padding: 15px; text-align: center; }
+        .container { padding: 10px; }
+        .page { display: none; }
         .page.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* UI Elemente */
-        .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-        .stack { display: flex; flex-direction: column; gap: 10px; }
-        
-        h2, h4 { margin-top: 0; display: flex; align-items: center; gap: 8px; }
-        input, select, button { 
-            padding: 12px; border-radius: 8px; border: none; font-size: 14px; outline: none;
-        }
-        input, select { background: #2d304e; color: white; flex: 1; min-width: 100px; }
-        
-        button { cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
-        button:active { opacity: 0.7; }
-        button.primary { background: var(--primary); color: white; }
-        button.danger { background: var(--danger); color: white; }
-        button.small { padding: 6px 12px; font-size: 12px; }
-
-        .tag { padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
-        .tag.good { background: var(--success); }
-        .tag.bad { background: var(--danger); }
-
-        /* === Matrix & Mobile Scrolling === */
-        .table-wrap { 
-            margin-top: 15px; border-radius: 12px; overflow: hidden; 
-            background: var(--card); border: 1px solid #333;
-        }
-        .ayto-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-        .ayto-table th, .ayto-table td { 
-            padding: 12px 8px; border: 1px solid #2d304e; text-align: center;
-        }
-        .ayto-table th { background: #23263c; color: var(--muted); font-weight: normal; }
-        
-        /* Sticky Column für Handys */
-        .name-cell { 
-            position: sticky; left: 0; background: var(--card) !important; 
-            z-index: 2; border-right: 2px solid var(--primary); font-weight: bold;
-        }
-        .ayto-table thead th:first-child { position: sticky; left: 0; z-index: 3; background: #23263c; }
-
-        /* Highlighting */
-        .highlight { background: rgba(52, 111, 255, 0.3) !important; }
-
-        /* Bottom Nav */
-        .bottom-nav {
-            position: fixed; bottom: 0; left: 0; right: 0; height: 65px;
-            background: #16192c; display: flex; justify-content: space-around;
-            align-items: center; border-top: 1px solid #333; z-index: 100;
-        }
-        .bottom-nav button {
-            background: none; color: var(--muted); display: flex; flex-direction: column;
-            align-items: center; font-size: 10px; gap: 4px; flex: 1;
-        }
+        .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px; }
+        .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+        input, select, button { padding: 10px; border-radius: 8px; border: none; background: #2d304e; color: white; }
+        button.primary { background: var(--primary); width: 100%; font-weight: bold; }
+        button.danger { background: var(--danger); }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: #16192c; display: flex; border-top: 1px solid #333; }
+        .bottom-nav button { flex: 1; background: none; font-size: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 0; }
         .bottom-nav button.active { color: var(--primary); }
-        .bottom-nav i { font-size: 20px; }
-
-        /* Overlay */
-        #overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.85);
-            display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 1000;
-        }
-        #overlay.show { display: flex; }
-        .progress-box { background: var(--card); padding: 30px; border-radius: 15px; text-align: center; width: 80%; max-width: 300px; }
+        
+        /* Mobile Table Fix */
+        .table-wrap { overflow-x: auto; background: var(--card); border-radius: 8px; }
+        table { border-collapse: collapse; width: 100%; font-size: 12px; }
+        th, td { padding: 10px 5px; border: 1px solid #2d304e; text-align: center; min-width: 70px; }
+        .sticky-col { position: sticky; left: 0; background: var(--card) !important; font-weight: bold; z-index: 5; }
     </style>
 </head>
 <body>
 
 <header>
-    <div class="logo-box">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Are_You_The_One_Logo.svg/1200px-Are_You_The_One_Logo.svg.png" alt="Logo">
-    </div>
-    <h1 style="margin:0; font-size: 24px;">AYTO Solver 2026</h1>
-    <div class="small muted">PWA • Offline nutzbar</div>
+    <h2 style="margin:0">AYTO Solver 2026</h2>
 </header>
 
 <div class="container">
     <div id="page-users" class="page active">
         <div class="card">
-            <h2>👥 Teilnehmer</h2>
+            <h3>Teilnehmer</h3>
+            <button class="primary" id="prefill" style="margin-bottom:15px">Auto-Fill Cast</button>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div id="listA"><h4>Frauen</h4></div>
+                <div id="listB"><h4>Männer</h4></div>
+            </div>
             <div class="row">
-                <button class="primary" id="prefill">Auto-Fill Cast</button>
-            </div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:15px;">
-                <div id="listA"><h4 style="color:#ff79c6">Frauen (A)</h4></div>
-                <div id="listB"><h4 style="color:#8be9fd">Männer (B)</h4></div>
-            </div>
-            <div class="row" style="margin-top:10px">
-                <button class="primary small" id="addA">+ Frau</button>
-                <button class="primary small" id="addB">+ Mann</button>
+                <button id="addA" style="flex:1">+ Frau</button>
+                <button id="addB" style="flex:1">+ Mann</button>
             </div>
         </div>
     </div>
 
     <div id="page-matchbox" class="page">
         <div class="card">
-            <h2>💞 Matchbox</h2>
-            <div class="stack">
-                <div class="row">
-                    <select id="tbA"></select>
-                    <span>×</span>
-                    <select id="tbB"></select>
-                </div>
-                <div class="row">
-                    <select id="tbType">
-                        <option value="NM">No Match (NM)</option>
-                        <option value="PM">Perfect Match (PM)</option>
-                    </select>
-                    <button class="primary" id="addTB">Hinzufügen</button>
-                </div>
+            <h3>Matchbox</h3>
+            <div class="row">
+                <select id="tbA" style="flex:1"></select>
+                <select id="tbB" style="flex:1"></select>
+            </div>
+            <div class="row">
+                <select id="tbType" style="flex:1">
+                    <option value="NM">No Match</option>
+                    <option value="PM">Perfect Match</option>
+                </select>
+                <button id="addTB" class="primary" style="flex:1">Hinzufügen</button>
             </div>
             <div id="tbList" style="margin-top:15px"></div>
         </div>
@@ -158,45 +71,29 @@
 
     <div id="page-nights" class="page">
         <div class="card">
-            <h2>🌙 Matching Night</h2>
-            <button class="primary" id="addNight">Neue Night eintragen</button>
-            <div id="nights" style="margin-top:15px"></div>
+            <h3>Matching Night</h3>
+            <button id="addNight" class="primary">Eintragen</button>
+            <div id="nights" style="margin-top:10px"></div>
         </div>
     </div>
 
     <div id="page-ergebnisse" class="page">
         <div class="card">
-            <h2>📊 Ergebnisse</h2>
-            <button class="primary" id="solveBtn" style="width:100%; padding:15px">BERECHNEN</button>
-            <div id="summary" style="margin-top:15px"></div>
+            <button id="solveBtn" class="primary">BERECHNEN</button>
+            <div id="summary" style="margin: 15px 0;"></div>
             <div id="matrix"></div>
         </div>
     </div>
 </div>
 
 <nav class="bottom-nav" id="nav">
-    <button class="active" data-target="page-users"><i>👥</i>Teilnehmer</button>
-    <button data-target="page-matchbox"><i>💞</i>Matchbox</button>
-    <button data-target="page-nights"><i>🌙</i>Nights</button>
-    <button data-target="page-ergebnisse"><i>📊</i>Ergebnis</button>
+    <button class="active" data-target="page-users">Teilnehmer</button>
+    <button data-target="page-matchbox">Matchbox</button>
+    <button data-target="page-nights">Nights</button>
+    <button data-target="page-ergebnisse">Ergebnis</button>
 </nav>
 
-<div id="overlay">
-    <div class="progress-box">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Are_You_The_One_Logo.svg/1200px-Are_You_The_One_Logo.svg.png" width="50" style="margin-bottom:10px">
-        <div style="margin-bottom:15px">Berechne Kombinationen...</div>
-        <div style="background:#2d304e; height:8px; border-radius:4px; overflow:hidden">
-            <div class="bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s"></div>
-        </div>
-    </div>
-</div>
-
-<script>
-    const script = document.createElement('script');
-    // Hängt den aktuellen Zeitstempel an, damit der Browser die app.js immer neu lädt
-    script.src = 'app.js?v=' + Date.now();
-    document.head.appendChild(script);
-</script>
+<script src="app.js"></script>
 
 </body>
 </html>

@@ -238,16 +238,29 @@ function initSolver() {
           summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} gültige Kombinationen</div>`;
           
           let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
+          
           A.forEach((na, i) => {
             html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
+            
             B.forEach((nb, j) => {
               const p = total > 0n ? Number((counts[i][j]*10000n)/total) / 100 : 0;
-              if (p === 0) html += `<td class="no-match">No Match</td>`;
-              else html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;">${p.toFixed(2)}%</td>`;
+              
+              if (p === 0) {
+                // PRÜFUNG: Ist es ein echtes "No Match" oder nur durch ein anderes Match blockiert?
+                // Bei der Frau (Gruppe A) lassen wir "0%" oft weg, wenn sie ein Double-Shot sein könnte.
+                html += `<td class="no-match">No Match</td>`;
+              } else if (p === 100) {
+                // Gold für Perfect Matches
+                html += `<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>`;
+              } else {
+                // Dynamische HSL-Farbe für die Wahrscheinlichkeit
+                html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;">${p.toFixed(2)}%</td>`;
+              }
             });
             html += "</tr>";
           });
-          matrixBox.innerHTML = html + "</table></div>"; 
+          matrixBox.innerHTML = html + "</table></div>";
+
           matrixBox.style.display="block";
           
           setTimeout(() => { hideOverlay(); worker.terminate(); }, 200);

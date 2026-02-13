@@ -179,7 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 }); // <-- Hier endet der DOMContentLoaded-Block jetzt SAUBER.
 
-/* === 📊 Solver mit Double-Shot Logik (Frauen-Fokus) === */
+/* === 📊 Solver für 11 Frauen & 10 Männer (Jede Frau kann Doppel-Match sein) === */
 function initSolver() {
   const solveBtn = document.getElementById("solveBtn"), 
         summaryBox = document.getElementById("summary"), 
@@ -213,12 +213,12 @@ function initSolver() {
       let counts = Array.from({length:m},()=>Array(n).fill(0n));
       let currentAssign = Array(m).fill(-1);
       
-      // usedB zählt jetzt, wie viele Frauen einem Mann zugeordnet sind
+      // Speicher für die Belegung der Männer
       let usedB = new Array(n).fill(0);
 
-      function dfs(idxP) {
+      function dfs(idxP, doubleMatchFound) {
         if(idxP === m) {
-          // Matching Night Check
+          // Check Matching Nights
           for(const nt of nights) {
             let hits = 0;
             for(let i=0; i<m; i++) {
@@ -234,37 +234,27 @@ function initSolver() {
           return;
         }
 
-        // Feste Matches (Matchbox)
-        if(forced[idxP] !== -1) {
-          const j = forced[idxP];
-          currentAssign[idxP] = j;
-          usedB[j]++;
-          dfs(idxP + 1);
-          usedB[j]--;
-          return;
-        }
-
+        // Mögliche Partner für die aktuelle Frau idxP durchgehen
         for(let j=0; j<n; j++) {
           if(forbidden[idxP].has(j)) continue;
-          
-          // Logik-Umkehr: 
-          // Jede Frau (idxP) braucht genau EINEN Mann.
-          // Ein Mann (j) darf aber bei der "Double-Shot"-Frau ein zweites Mal auftauchen.
-          
-          let matchesUsedByMen = usedB[j];
-          let totalDoubleMatchesInSystem = usedB.filter(v => v > 1).length;
+          if(forced[idxP] !== -1 && forced[idxP] !== j) continue;
 
-          // Ein Mann darf nur dann eine 2. Frau nehmen, wenn noch kein anderer Mann 2 Frauen hat
-          if(matchesUsedByMen === 0 || (matchesUsedByMen === 1 && totalDoubleMatchesInSystem === 0)) {
+          // Ein Mann darf nur dann ein zweites Mal gewählt werden, 
+          // wenn wir noch kein Doppel-Match in dieser Kombination vergeben haben.
+          const isDouble = usedB[j] === 1;
+          
+          if(usedB[j] === 0 || (isDouble && !doubleMatchFound)) {
             currentAssign[idxP] = j;
             usedB[j]++;
-            dfs(idxP + 1);
+            dfs(idxP + 1, doubleMatchFound || isDouble);
             usedB[j]--;
+            currentAssign[idxP] = -1;
           }
         }
       }
 
-      dfs(0);
+      // Start der Berechnung: Jede Kombination muss genau EIN Doppel-Match enthalten
+      dfs(0, false);
       self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString()))});
     };
   `;
@@ -273,7 +263,7 @@ function initSolver() {
   const workerUrl = URL.createObjectURL(blob);
 
   solveBtn.onclick = () => {
-    const {A, B} = getT(); if(A.length < 2) return alert("Bitte Teilnehmer anlegen!");
+    const {A, B} = getT(); if(A.length < 2) return alert("Teilnehmer fehlen!");
     showOverlay();
     
     const worker = new Worker(workerUrl);
@@ -283,22 +273,24 @@ function initSolver() {
       const total = BigInt(e.data.total);
       const counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
       
-      summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} Kombinationen</div>`;
+      summaryBox.innerHTML = `<h3>Ergebnis</h3><div>\${total.toString()} gültige Kombinationen</div>`;
       
-      let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
+      let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>\${B.map(b=>\`<th>\${b}</th>\`).join("")}</tr>`;
       
       A.forEach((na, i) => {
-        html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
+        html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;z-index:2;font-weight:bold">\${na}</td>`;
         B.forEach((nb, j) => {
           const count = counts[i][j];
           const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
           
+          // Anzeige-Logik:
           if (p >= 100) {
             html += `<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>`;
           } else if (count === 0n) {
-            html += `<td class="no-match" style="color:#555;font-size:10px;">No Match</td>`;
+            html += `<td class="no-match" style="color:#444;font-size:10px;">No Match</td>`;
           } else {
-            html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;">${p.toFixed(2)}%</td>`;
+            // Die Wahrscheinlichkeit wird angezeigt, AUCH wenn sie woanders ein Match hat
+            html += `<td style="background:hsl(\${260-(p*2)},70%,\${20+p*0.3}%);color:white;text-align:center;font-size:11px;">\${p.toFixed(2)}%</td>`;
           }
         });
         html += "</tr>";

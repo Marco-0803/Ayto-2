@@ -192,8 +192,9 @@ function initSolver() {
       const idxA = Object.fromEntries(A.map((n,i)=>[n,i])), idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
       const m = A.length, n = B.length;
       
-      const forced = Array(m).fill(-1);
-      const forbidden = Array.from({length:m},()=>new Set());
+      const forced = Array(m).fill(-1); // PMs
+      const forbidden = Array.from({length:m},()=>new Set()); // NMs
+      
       M.forEach(t => { 
         if(t.A in idxA && t.B in idxB) { 
           if(t.type==="PM") forced[idxA[t.A]] = idxB[t.B]; 
@@ -211,41 +212,65 @@ function initSolver() {
 
       let total = 0n;
       let counts = Array.from({length:m},()=>Array(n).fill(0n));
-      let currentAssign = Array(m).fill(-1);
-      let usedB = new Array(n).fill(0);
+      
+      // Jede Frau bekommt ein Array ihrer Partner (normalerweise 1, bei einer Frau 2)
+      let currentAssign = Array.from({length:m}, () => []);
+      let usedB = new Array(n).fill(false); // Ein Mann kann nur EINMAL vergeben werden
 
-      function dfs(idxP, doubleMatchFound) {
+      function dfs(idxP, doubleWomanIdx) {
+        // Wenn alle Frauen durch sind
         if(idxP === m) {
+          // Check Matching Nights
           for(const nt of nights) {
             let hits = 0;
             for(let i=0; i<m; i++) {
-              if(currentAssign[i] !== -1 && currentAssign[i] === nt.map[i]) hits++;
+              // Eine Frau hat einen Treffer, wenn einer ihrer Partner in der Nacht gewählt wurde
+              if(currentAssign[i].includes(nt.map[i])) hits++;
             }
             if(hits !== nt.beams) return;
           }
+          
           total++;
           for(let i=0; i<m; i++) {
-            if(currentAssign[i] !== -1) counts[i][currentAssign[i]]++;
+            currentAssign[i].forEach(partnerIdx => {
+              counts[i][partnerIdx]++;
+            });
           }
           return;
         }
 
+        // Wir probieren für die aktuelle Frau (idxP) Partner aus
         for(let j=0; j<n; j++) {
-          if(forbidden[idxP].has(j)) continue;
+          if(usedB[j] || forbidden[idxP].has(j)) continue;
           if(forced[idxP] !== -1 && forced[idxP] !== j) continue;
 
-          const isDouble = usedB[j] === 1;
-          if(usedB[j] === 0 || (isDouble && !doubleMatchFound)) {
-            currentAssign[idxP] = j;
-            usedB[j]++;
-            dfs(idxP + 1, doubleMatchFound || isDouble);
-            usedB[j]--;
-            currentAssign[idxP] = -1;
+          // Normalfall: Frau nimmt diesen Mann
+          usedB[j] = true;
+          currentAssign[idxP].push(j);
+
+          // Falls wir noch keine "Double-Frau" festgelegt haben, kann diese Frau einen ZWEITEN Mann nehmen
+          if (doubleWomanIdx === -1) {
+             for(let k=j+1; k<n; k++) {
+                if(usedB[k] || forbidden[idxP].has(k)) continue;
+                // Die Double-Frau nimmt einen zweiten Mann (k)
+                usedB[k] = true;
+                currentAssign[idxP].push(k);
+                dfs(idxP + 1, idxP); // idxP ist jetzt die festgelegte Double-Frau
+                usedB[k] = false;
+                currentAssign[idxP].pop();
+             }
           }
+          
+          // Normaler Pfad (Frau ist keine Double-Frau oder sie ist es, aber wir sind im ersten Partner)
+          dfs(idxP + 1, doubleWomanIdx);
+
+          // Backtracking
+          usedB[j] = false;
+          currentAssign[idxP].pop();
         }
       }
 
-      dfs(0, false);
+      dfs(0, -1);
       self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString()))});
     };
   `;
@@ -256,22 +281,18 @@ function initSolver() {
   solveBtn.onclick = () => {
     const {A, B} = getT(); if(A.length < 2) return alert("Teilnehmer fehlen!");
     showOverlay();
-    
     const worker = new Worker(workerUrl);
     worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
     
     worker.onmessage = (e) => {
       const total = BigInt(e.data.total);
       const counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
-      
       summaryBox.innerHTML = "<h3>Ergebnis</h3><div>" + total.toString() + " gültige Kombinationen</div>";
       
       let html = '<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>';
-      // Spaltenköpfe (Männer)
       B.forEach(nameB => { html += '<th>' + nameB + '</th>'; });
       html += '</tr>';
       
-      // Zeilen (Frauen)
       A.forEach((nameA, i) => {
         html += '<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">' + nameA + '</td>';
         B.forEach((nameB, j) => {
@@ -284,13 +305,11 @@ function initSolver() {
             html += '<td class="no-match" style="color:#555;font-size:10px;">No Match</td>';
           } else {
             const hue = 260 - (p * 2);
-            const light = 20 + (p * 0.3);
-            html += '<td style="background:hsl(' + hue + ',70%,' + light + '%);color:white;text-align:center;font-size:11px;">' + p.toFixed(2) + '%</td>';
+            html += '<td style="background:hsl(' + hue + ',70%,25%);color:white;text-align:center;font-size:11px;">' + p.toFixed(2) + '%</td>';
           }
         });
         html += '</tr>';
       });
-      
       matrixBox.innerHTML = html + "</table></div>";
       matrixBox.style.display = "block";
       hideOverlay();

@@ -19,7 +19,11 @@ function saveT(data) { localStorage.setItem(STORAGE_KEY_T, JSON.stringify(data))
 
 function showOverlay(){
   const ov=document.getElementById('overlay');
-  if(ov){ ov.classList.add('show'); const bar = ov.querySelector('.progress .bar'); if(bar) bar.style.width = "0%"; }
+  if(ov){ 
+    ov.classList.add('show'); 
+    const bar = ov.querySelector('.progress .bar'); 
+    if(bar) bar.style.width = "0%"; 
+  }
 }
 function hideOverlay(){
   const ov=document.getElementById('overlay'); if(ov) ov.classList.remove('show');
@@ -170,14 +174,18 @@ document.addEventListener("DOMContentLoaded", () => {
     renderNights();
   }
 
-/* === 📊 Solver mit funktionierendem Prozent-Counter === */
+  // WICHTIG: Hier rufen wir den Solver auf!
+  initSolver();
+
+}); // <-- Hier endet der DOMContentLoaded-Block jetzt SAUBER.
+
+/* === 📊 Solver-Funktion (außerhalb definiert) === */
 function initSolver() {
   const solveBtn = document.getElementById("solveBtn"), 
         summaryBox = document.getElementById("summary"), 
         matrixBox = document.getElementById("matrix");
   if(!solveBtn) return;
 
-  // Der Worker-Teil bleibt gleich...
   const workerCode = `
     self.onmessage = function(e) {
       const { A, B, M, Nraw } = e.data;
@@ -202,100 +210,17 @@ function initSolver() {
   solveBtn.onclick = () => {
     const {A, B} = getT(); if(A.length < 2) return alert("Bitte Teilnehmer anlegen!");
     
-    showOverlay(); // Das Overlay wird eingeblendet
+    showOverlay(); 
     const textEl = document.getElementById('progress-text');
     const startTime = Date.now();
     let currentPercent = 0;
 
-    // --- 🏃 NEU: Das Hochzählen der Prozente ---
     const progressInterval = setInterval(() => {
       if (currentPercent < 99) {
-        currentPercent += 1; // Zählt hoch
+        currentPercent += 1;
         if (textEl) textEl.textContent = `Berechnung läuft... (${currentPercent}%)`;
       }
-    }, 28); // 3000ms / 100 Schritte ≈ 30ms
-
-    const worker = new Worker(workerUrl);
-    worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
-    
-    worker.onmessage = (e) => {
-      if(e.data.type === 'result') {
-        const duration = Date.now() - startTime;
-        const delay = Math.max(0, 3000 - duration); // Wir warten den Rest der 3 Sek ab
-
-        setTimeout(() => {
-          clearInterval(progressInterval); // Zähler stoppen
-          if (textEl) textEl.textContent = `Berechnung läuft... (100%)`;
-
-          const total = BigInt(e.data.total), counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
-          summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} gültige Kombinationen</div>`;
-          
-          let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
-          A.forEach((na, i) => {
-            html += `<tr><td class="a-name">${na}</td>`;
-            B.forEach((nb, j) => {
-              const p = total > 0n ? Number((counts[i][j]*10000n)/total) / 100 : 0;
-              if (p === 0) html += `<td class="no-match">No Match</td>`;
-              else html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;">${p.toFixed(2)}%</td>`;
-            });
-            html += "</tr>";
-          });
-          matrixBox.innerHTML = html + "</table></div>"; 
-          matrixBox.style.display="block";
-          
-          setTimeout(() => { hideOverlay(); worker.terminate(); }, 200);
-        }, delay);
-      }
-    };
-  };
-}
-);
-
-/* === 📊 Web-Worker Solver mit flüssiger 3s Animation === */
-function initSolver() {
-  const solveBtn = document.getElementById("solveBtn"), 
-        summaryBox = document.getElementById("summary"), 
-        matrixBox = document.getElementById("matrix");
-  if(!solveBtn) return;
-
-  // Worker-Code bleibt gleich
-  const workerCode = `
-    self.onmessage = function(e) {
-      const { A, B, M, Nraw } = e.data;
-      const idxA = Object.fromEntries(A.map((n,i)=>[n,i])), idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
-      const m = A.length, n = B.length, NONE = n;
-      const forced = Array(m).fill(-1), forbidden = Array.from({length:m},()=>new Set());
-      M.forEach(t => { if(t.A in idxA && t.B in idxB) { if(t.type==="PM") forced[idxA[t.A]] = idxB[t.B]; else if(t.type==="NM") forbidden[idxA[t.A]].add(idxB[t.B]); } });
-      const nights = Nraw.map(nObj => ({ map: A.map(name => { const p = nObj.pairs.find(pair => pair.A === name); return (p && p.B in idxB) ? idxB[p.B] : NONE; }), beams: nObj.lights }));
-      const noneQuota = Math.max(0, m - n), dom = A.map((_,i) => { if(forced[i]!==-1) return new Set([forced[i]]); let s = new Set([...Array(n).keys()].filter(j => !forbidden[i].has(j))); if(noneQuota > 0) s.add(NONE); return s; });
-      const order = [...Array(m).keys()].sort((a,b)=>dom[a].size-dom[b].size);
-      const usedB = new Array(n).fill(false);
-      let usedNone = 0, total = 0n, assign = Array(m).fill(-1), counts = Array.from({length:m},()=>Array(n).fill(0n));
-      function prune() { for(const nt of nights) { let hits = 0, could = 0; for(let i=0; i<m; i++){ const target = nt.map[i], current = assign[i]; if(current !== -1) { if(current !== NONE && current === target) hits++; } else if(target !== NONE && !usedB[target] && dom[i].has(target)) could++; } if(nt.beams < hits || nt.beams > (hits + could)) return false; } return true; }
-      function dfs(pos) { if(pos === m) { if (usedNone === noneQuota) { total++; for(let i=0; i<m; i++) { if(assign[i]<n) counts[i][assign[i]]++; } } return; } const i = order[pos]; for(const j of dom[i]) { if(j===NONE) { if(usedNone < noneQuota) { assign[i]=NONE; usedNone++; if(prune()) dfs(pos+1); assign[i]=-1; usedNone--; } } else { if(!usedB[j]) { assign[i]=j; usedB[j]=true; if(prune()) dfs(pos+1); assign[i]=-1; usedB[j]=false; } } } }
-      dfs(0); self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString()))});
-    };
-  `;
-
-  const blob = new Blob([workerCode], { type: 'application/javascript' });
-  const workerUrl = URL.createObjectURL(blob);
-
-  solveBtn.onclick = () => {
-    const {A, B} = getT(); if(A.length < 2) return alert("Bitte Teilnehmer anlegen!");
-    
-    showOverlay();
-    const ov = document.getElementById('overlay');
-    const textEl = ov.querySelector('p') || ov.querySelector('div[style*="font-size"]'); 
-    const startTime = Date.now();
-    
-    // --- 🏃 Animation für die Prozente (0 bis 100 in 3s) ---
-    let progress = 0;
-    const progressInterval = setInterval(() => {
-      progress += 2; // Erhöht den Wert schrittweise
-      if (progress <= 99) {
-        if(textEl) textEl.textContent = `Berechnung läuft... (${progress}%)`;
-      }
-    }, 50); // Alle 50ms ein Update
+    }, 28);
 
     const worker = new Worker(workerUrl);
     worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
@@ -306,26 +231,26 @@ function initSolver() {
         const delay = Math.max(0, 3000 - duration);
 
         setTimeout(() => {
-          clearInterval(progressInterval); // Animation stoppen
-          if(textEl) textEl.textContent = `Berechnung läuft... (100%)`;
+          clearInterval(progressInterval);
+          if (textEl) textEl.textContent = `Berechnung läuft... (100%)`;
 
           const total = BigInt(e.data.total), counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
           summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} gültige Kombinationen</div>`;
           
           let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
           A.forEach((na, i) => {
-            html += `<tr><td style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
+            html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
             B.forEach((nb, j) => {
               const p = total > 0n ? Number((counts[i][j]*10000n)/total) / 100 : 0;
               if (p === 0) html += `<td class="no-match">No Match</td>`;
-              else html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;font-size:11px;min-width:75px">${p.toFixed(2)}%</td>`;
+              else html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;">${p.toFixed(2)}%</td>`;
             });
             html += "</tr>";
           });
           matrixBox.innerHTML = html + "</table></div>"; 
           matrixBox.style.display="block";
           
-          setTimeout(() => { hideOverlay(); worker.terminate(); }, 200); // Ganz kurzer Moment bei 100% verweilen
+          setTimeout(() => { hideOverlay(); worker.terminate(); }, 200);
         }, delay);
       }
     };

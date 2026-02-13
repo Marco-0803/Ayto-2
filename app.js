@@ -179,7 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 }); // <-- Hier endet der DOMContentLoaded-Block jetzt SAUBER.
 
-/* === 📊 Solver mit Double-Shot Logik === */
+/* === 📊 Solver mit Double-Shot Logik (Frauen-Fokus) === */
 function initSolver() {
   const solveBtn = document.getElementById("solveBtn"), 
         summaryBox = document.getElementById("summary"), 
@@ -192,7 +192,6 @@ function initSolver() {
       const idxA = Object.fromEntries(A.map((n,i)=>[n,i])), idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
       const m = A.length, n = B.length;
       
-      // Matches & No Matches aus Matchbox
       const forced = Array(m).fill(-1);
       const forbidden = Array.from({length:m},()=>new Set());
       M.forEach(t => { 
@@ -202,7 +201,6 @@ function initSolver() {
         } 
       });
 
-      // Matching Nights aufbereiten
       const nights = Nraw.map(nObj => ({ 
         map: A.map(name => { 
           const p = nObj.pairs.find(pair => pair.A === name); 
@@ -214,11 +212,13 @@ function initSolver() {
       let total = 0n;
       let counts = Array.from({length:m},()=>Array(n).fill(0n));
       let currentAssign = Array(m).fill(-1);
+      
+      // usedB zählt jetzt, wie viele Frauen einem Mann zugeordnet sind
       let usedB = new Array(n).fill(0);
 
       function dfs(idxP) {
         if(idxP === m) {
-          // Check Matching Nights
+          // Matching Night Check
           for(const nt of nights) {
             let hits = 0;
             for(let i=0; i<m; i++) {
@@ -234,7 +234,7 @@ function initSolver() {
           return;
         }
 
-        // Wenn für diese Frau ein PM existiert
+        // Feste Matches (Matchbox)
         if(forced[idxP] !== -1) {
           const j = forced[idxP];
           currentAssign[idxP] = j;
@@ -247,10 +247,15 @@ function initSolver() {
         for(let j=0; j<n; j++) {
           if(forbidden[idxP].has(j)) continue;
           
-          // Double-Shot Logik: Ein Mann darf maximal 2 Frauen haben, 
-          // aber insgesamt darf nur EIN Mann 2 Frauen haben (bei 11 Frauen, 10 Männern)
-          let doubles = usedB.filter(v => v > 1).length;
-          if(usedB[j] === 0 || (usedB[j] === 1 && doubles === 0)) {
+          // Logik-Umkehr: 
+          // Jede Frau (idxP) braucht genau EINEN Mann.
+          // Ein Mann (j) darf aber bei der "Double-Shot"-Frau ein zweites Mal auftauchen.
+          
+          let matchesUsedByMen = usedB[j];
+          let totalDoubleMatchesInSystem = usedB.filter(v => v > 1).length;
+
+          // Ein Mann darf nur dann eine 2. Frau nehmen, wenn noch kein anderer Mann 2 Frauen hat
+          if(matchesUsedByMen === 0 || (matchesUsedByMen === 1 && totalDoubleMatchesInSystem === 0)) {
             currentAssign[idxP] = j;
             usedB[j]++;
             dfs(idxP + 1);
@@ -271,7 +276,6 @@ function initSolver() {
     const {A, B} = getT(); if(A.length < 2) return alert("Bitte Teilnehmer anlegen!");
     showOverlay();
     
-    const textEl = document.getElementById('progress-text');
     const worker = new Worker(workerUrl);
     worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
     
@@ -284,7 +288,7 @@ function initSolver() {
       let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
       
       A.forEach((na, i) => {
-        html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;z-index:2">${na}</td>`;
+        html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
         B.forEach((nb, j) => {
           const count = counts[i][j];
           const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
@@ -292,7 +296,6 @@ function initSolver() {
           if (p >= 100) {
             html += `<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>`;
           } else if (count === 0n) {
-            // No Match nur, wenn es mathematisch unmöglich ist
             html += `<td class="no-match" style="color:#555;font-size:10px;">No Match</td>`;
           } else {
             html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;">${p.toFixed(2)}%</td>`;

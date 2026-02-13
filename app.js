@@ -114,7 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
   refreshDropdowns(); renderMB();
 });
 
-/* === 🌙 Matching Nights (Mit intelligenter Auswahl) === */
+/* === 🌙 Matching Nights === */
 document.addEventListener("DOMContentLoaded", () => {
   const addNightBtn = document.getElementById("addNight"), nightsList = document.getElementById("nights");
   if(!nightsList) return;
@@ -164,20 +164,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
     updateSelects();
 
+    // === Lichter Auswahl (Jetzt als Dropdown) ===
     const lRow = document.createElement("div"); lRow.className="row"; lRow.style="margin-top:15px;padding-top:15px;border-top:1px solid #333";
-    lRow.innerHTML = `<span>Lichter:</span><input type="number" value="0" min="0" max="${A.length}" style="width:70px;padding:8px">`;
+    const lightSelect = document.createElement("select"); lightSelect.style="width:100px;padding:8px";
+    // Erstellt Optionen von 0 bis zur Anzahl der A-Teilnehmer (max 10-11)
+    for(let i=0; i <= A.length; i++) {
+        lightSelect.innerHTML += `<option value="${i}">${i}</option>`;
+    }
+    lRow.innerHTML = `<span>Lichter:</span>`;
+    lRow.appendChild(lightSelect);
     box.appendChild(lRow);
 
     const btnRow = document.createElement("div"); btnRow.className="row"; btnRow.style="margin-top:20px";
     const sBtn = document.createElement("button"); sBtn.className="primary"; sBtn.style="flex:1"; sBtn.textContent="Speichern";
-    const cBtn = document.createElement("button"); cBtn.className="ghost"; sBtn.style="flex:1"; cBtn.textContent="Abbrechen";
+    const cBtn = document.createElement("button"); cBtn.className="ghost"; cBtn.style="flex:1"; cBtn.textContent="Abbrechen";
     btnRow.appendChild(sBtn); btnRow.appendChild(cBtn); box.appendChild(btnRow); ov.appendChild(box); document.body.appendChild(ov);
 
     cBtn.onclick = () => ov.remove();
     sBtn.onclick = () => {
       const pairs = pairRows.map(r=>({A: r.A, B: r.sel.value}));
       const nights = JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]");
-      nights.push({pairs, lights: parseInt(lRow.querySelector("input").value)});
+      nights.push({pairs, lights: parseInt(lightSelect.value)});
       localStorage.setItem("aytoMatchingNights", JSON.stringify(nights));
       ov.remove(); renderNights();
     };
@@ -273,7 +280,7 @@ window.addEventListener("DOMContentLoaded", () => {
         A.forEach((na, i) => {
           html += `<tr><td style="position:sticky;left:0;background:#23283f;font-weight:bold">${na}</td>`;
           B.forEach((nb, j) => {
-            const p = total > 0n ? Number((counts[i][j]*10000n)/total)/100 : 0;
+            const p = total > 0n ? Number((counts[i][j]*10000n)/total) / 100 : 0;
             const bg = `hsl(${p*1.2}, 70%, ${20 + p*0.3}%)`;
             html += `<td style="background:${bg};color:white;text-align:center">${p.toFixed(2)}%</td>`;
           });

@@ -1,326 +1,227 @@
-/* === Allgemeines Layout === */
-body {
-  margin: 0;
-  font-family: "Segoe UI", Roboto, sans-serif;
-  background: #0e0f1a;
-  color: #f5f5f5;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+/* === 🔄 Auto-Update & Versioning === */
+(function(){
+  try {
+    const meta = document.querySelector('meta[name="app-version"]');
+    const version = meta ? meta.content : null;
+    const last = localStorage.getItem('aytoAppVersion');
+    if (version && version !== last) {
+      localStorage.setItem('aytoAppVersion', version);
+      if ('caches' in window) caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+      location.reload(true);
+    }
+  } catch (e) { console.warn("Fehler beim Auto-Update:", e); }
+})();
+
+/* === 🛠 Globale Helfer & Daten-Management === */
+const STORAGE_KEY_T = "aytoTeilnehmer";
+function getT() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY_T)) || {A:[], B:[]}; } catch(e) { return {A:[], B:[]}; } }
+function saveT(data) { localStorage.setItem(STORAGE_KEY_T, JSON.stringify(data)); document.dispatchEvent(new Event("teilnehmerChanged")); }
+
+function showOverlay(){
+  const ov=document.getElementById('overlay');
+  if(ov){ ov.classList.add('show'); const bar = ov.querySelector('.progress .bar'); if(bar) bar.style.width = "0%"; }
+}
+function hideOverlay(){
+  const ov=document.getElementById('overlay'); if(ov) ov.classList.remove('show');
 }
 
-h1, h2, h3 {
-  margin: 0;
-  font-weight: 600;
-  color: #ffffff;
+/* === 👥 Teilnehmer-Verwaltung === */
+function createPersonUI(name, group, listId) {
+  const listEl = document.getElementById(listId);
+  if (!listEl) return;
+  const div = document.createElement("div");
+  div.className = "row";
+  div.innerHTML = `<input type="text" value="${name}" placeholder="Name" style="flex:1"><button class="danger small">✖</button>`;
+  const inp = div.querySelector("input");
+  inp.oninput = () => {
+    const A = [...document.getElementById("listA").querySelectorAll("input")].map(i=>i.value.trim()).filter(Boolean);
+    const B = [...document.getElementById("listB").querySelectorAll("input")].map(i=>i.value.trim()).filter(Boolean);
+    saveT({A, B});
+  };
+  div.querySelector("button").onclick = () => { div.remove(); inp.oninput(); };
+  listEl.appendChild(div);
 }
 
-/* === Header mit Farbverlauf von Pink → Blau === */
-header {
-  text-align: center;
-  padding: 12px 8px;
-  background: linear-gradient(90deg, #ff4fa8 0%, #4a82ff 100%);
-  border-bottom: 1px solid rgba(255,255,255,0.1);
-  color: #fff;
-}
-/* === Sanft animierter Farbverlauf (optional) === */
-@keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
+/* === 🚀 Haupt-Initialisierung === */
+document.addEventListener("DOMContentLoaded", () => {
+  
+  /* --- 🌐 Navigation --- */
+  const nav = document.getElementById('nav');
+  const pages = document.querySelectorAll('.page');
+  if(nav){
+    nav.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button'); if(!btn) return;
+      document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const id = btn.getAttribute('data-target');
+      pages.forEach(p=> p.classList.toggle('active', p.id===id));
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+  }
 
-header {
-  background: linear-gradient(90deg, #ff4fa8, #4a82ff, #ff4fa8);
-  background-size: 200% 200%;
-  animation: gradientShift 12s ease infinite;
-}
-/* Logo bleibt mittig, leicht betont */
-header img.logo {
-  width: 90px;
-  display: block;
-  margin: 0 auto 6px;
-}
+  /* --- 👥 Teilnehmer & Prefill --- */
+  const listA = document.getElementById("listA"), listB = document.getElementById("listB");
+  if(listA && listB) {
+    const data = getT();
+    data.A.forEach(n => createPersonUI(n, "A", "listA"));
+    data.B.forEach(n => createPersonUI(n, "B", "listB"));
 
-/* Untertitel dezenter */
-header .small {
-  font-size: 12px;
-  color: rgba(255,255,255,0.8);
-}
-header img.logo {
-  width: 90px;
-  display: block;
-  margin: 0 auto 5px;
-}
-header .small {
-  font-size: 12px;
-  color: #aaa;
-}
+    document.getElementById("addA").onclick = () => createPersonUI("", "A", "listA");
+    document.getElementById("addB").onclick = () => createPersonUI("", "B", "listB");
 
-/* === Hauptcontainer === */
-main {
-  flex: 1;
-  padding-bottom: 70px;
-}
-.page {
-  display: none;
-  padding: 12px;
-}
-.page.active {
-  display: block;
-}
+    const preBtn = document.getElementById("prefill");
+    preBtn.onclick = () => {
+      const A = ["Adrianna", "Alicia", "Aurora", "Elena", "Ella", "Laura", "Linda", "Marla", "Michelle", "Tiziana", "Tonia"];
+      const B = ["Chris", "Ema", "Evi", "Jeronymo", "Jerry", "Julian.M", "Julian.S", "Luke", "Meji", "Noel"];
+      listA.innerHTML = ""; listB.innerHTML = "";
+      A.forEach(n => createPersonUI(n, "A", "listA"));
+      B.forEach(n => createPersonUI(n, "B", "listB"));
+      saveT({A, B});
+      preBtn.textContent = "✅ Staffel 2026 geladen"; preBtn.disabled = true;
+    };
+  }
 
-/* === Karten / Sektionen === */
-.card {
-  background: rgba(30, 33, 60, 0.9);
-  border-radius: 10px;
-  padding: 10px 14px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-  margin-bottom: 14px;
-}
-.stack > *:not(:last-child) {
-  margin-bottom: 8px;
-}
+  /* --- 💞 Matchbox --- */
+  const tbA = document.getElementById("tbA"), tbB = document.getElementById("tbB"), tbList = document.getElementById("tbList");
+  if(tbA && tbB) {
+    const refreshMBOptions = () => {
+      const {A, B} = getT();
+      tbA.innerHTML = '<option value="">— A auswählen —</option>' + A.map(n=>`<option>${n}</option>`).join("");
+      tbB.innerHTML = '<option value="">— B auswählen —</option>' + B.map(n=>`<option>${n}</option>`).join("");
+    };
+    const renderMB = () => {
+      const mb = JSON.parse(localStorage.getItem("aytoMatchbox") || "[]");
+      tbList.innerHTML = mb.length ? "" : "<div class='small muted'>Noch keine Einträge</div>";
+      mb.forEach((m, i) => {
+        const tag = m.type==="PM"?"good":m.type==="NM"?"bad":"neutral";
+        const div = document.createElement("div"); div.className="row";
+        div.innerHTML = `<div style="flex:1">${m.A} × ${m.B} <span class="tag ${tag}">${m.type}</span></div><button class="danger small">✖</button>`;
+        div.querySelector("button").onclick = () => { mb.splice(i, 1); localStorage.setItem("aytoMatchbox", JSON.stringify(mb)); renderMB(); };
+        tbList.appendChild(div);
+      });
+    };
+    document.getElementById("addTB").onclick = () => {
+      if(!tbA.value || !tbB.value) return alert("Bitte A und B wählen");
+      const mb = JSON.parse(localStorage.getItem("aytoMatchbox") || "[]");
+      mb.push({A: tbA.value, B: tbB.value, type: document.getElementById("tbType").value});
+      localStorage.setItem("aytoMatchbox", JSON.stringify(mb));
+      renderMB();
+    };
+    document.addEventListener("teilnehmerChanged", refreshMBOptions);
+    refreshMBOptions(); renderMB();
+  }
 
-/* === Buttons === */
-button {
-  border: none;
-  border-radius: 6px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.3s;
-}
-button.primary {
-  background: #346fff;
-  color: #fff;
-}
-button.primary:hover {
-  background: #4a82ff;
-}
-button.ghost {
-  background: rgba(255,255,255,0.1);
-  color: #fff;
-}
-button.ghost:hover {
-  background: rgba(255,255,255,0.2);
-}
-button.danger {
-  background: #c42c2c;
-  color: #fff;
-}
-button.danger:hover {
-  background: #e03e3e;
-}
-button.small {
-  font-size: 12px;
-  padding: 5px 8px;
-}
+  /* --- 🌙 Matching Nights --- */
+  const addNightBtn = document.getElementById("addNight"), nightsList = document.getElementById("nights");
+  if(addNightBtn) {
+    const renderNights = () => {
+      const nights = JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]");
+      nightsList.innerHTML = nights.length ? "" : "<div class='small muted'>Keine Matching Night angelegt</div>";
+      nights.forEach((n, i) => {
+        const div = document.createElement("div"); div.className="card stack";
+        div.innerHTML = `<div class="row" style="justify-content:space-between"><strong>Night ${i+1}</strong><button class="danger small">✖</button></div>
+          <div class="small muted">Lichter: ${n.lights}</div>
+          <table style="width:100%;font-size:12px">${n.pairs.map(p=>`<tr><td>${p.A}</td><td>×</td><td>${p.B === 'keine' ? '<i>Kein Partner</i>' : p.B}</td></tr>`).join("")}</table>`;
+        div.querySelector("button").onclick = () => { nights.splice(i,1); localStorage.setItem("aytoMatchingNights", JSON.stringify(nights)); renderNights(); };
+        nightsList.appendChild(div);
+      });
+    };
 
-/* === Warnungen & Texte === */
-.warning {
-  background: rgba(255, 170, 0, 0.1);
-  border-left: 3px solid #ffaa00;
-  padding: 6px;
-  color: #ffcc55;
-}
-.small {
-  font-size: 13px;
-}
-.muted {
-  color: #999;
-}
+    addNightBtn.onclick = () => {
+      const {A, B} = getT(); if(!A.length || !B.length) return alert("Teilnehmer fehlen!");
+      const ov = document.createElement("div"); ov.style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:10000;display:flex;align-items:center;justify-content:center;padding:15px";
+      const box = document.createElement("div"); box.className="card stack"; box.style="max-width:450px;width:100%;max-height:95vh;overflow-y:auto;background:#171a2b;padding:20px;border:1px solid #333";
+      box.innerHTML = `<h3 style="margin-top:0">Matching Night</h3>`;
+      const pairRows = [];
+      const updateSelects = () => {
+        const usedB = pairRows.map(r => r.sel.value).filter(v => v !== "keine");
+        pairRows.forEach(row => {
+          const current = row.sel.value;
+          let html = `<option value="keine">Kein Partner</option>`;
+          B.forEach(nameB => { if (!usedB.includes(nameB) || nameB === current) html += `<option value="${nameB}" ${nameB === current ? 'selected' : ''}>${nameB}</option>`; });
+          row.sel.innerHTML = html;
+        });
+      };
+      A.forEach(nameA => {
+        const row = document.createElement("div"); row.style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px";
+        row.innerHTML = `<span style="font-size:14px;font-weight:bold;flex:1">${nameA}</span>`;
+        const sel = document.createElement("select"); sel.style="flex:1.5;padding:8px";
+        sel.onchange = updateSelects; row.appendChild(sel); box.appendChild(row);
+        pairRows.push({A: nameA, sel});
+      });
+      updateSelects();
+      const lRow = document.createElement("div"); lRow.className="row"; lRow.style="margin-top:15px;padding-top:15px;border-top:1px solid #333";
+      const lightSelect = document.createElement("select"); lightSelect.style="width:100px;padding:8px";
+      for(let i=0; i <= A.length; i++) lightSelect.innerHTML += `<option value="${i}">${i}</option>`;
+      lRow.innerHTML = `<span>Lichter:</span>`; lRow.appendChild(lightSelect); box.appendChild(lRow);
+      const btnRow = document.createElement("div"); btnRow.className="row"; btnRow.style="margin-top:20px";
+      const sBtn = document.createElement("button"); sBtn.className="primary"; sBtn.style="flex:1"; sBtn.textContent="Speichern";
+      const cBtn = document.createElement("button"); cBtn.className="ghost"; cBtn.style="flex:1"; cBtn.textContent="Abbrechen";
+      btnRow.appendChild(sBtn); btnRow.appendChild(cBtn); box.appendChild(btnRow); ov.appendChild(box); document.body.appendChild(ov);
+      cBtn.onclick = () => ov.remove();
+      sBtn.onclick = () => {
+        const pairs = pairRows.map(r=>({A: r.A, B: r.sel.value}));
+        const nights = JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]");
+        nights.push({pairs, lights: parseInt(lightSelect.value)});
+        localStorage.setItem("aytoMatchingNights", JSON.stringify(nights));
+        ov.remove(); renderNights();
+      };
+    };
+    renderNights();
+  }
 
-/* === Navigation unten === */
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  display: flex;
-  justify-content: space-around;
-  background: rgba(20, 22, 35, 0.95);
-  border-top: 1px solid rgba(255,255,255,0.1);
-  padding: 4px 0;
-  backdrop-filter: blur(8px);
-}
-.bottom-nav button {
-  flex: 1;
-  background: none;
-  color: #aaa;
-  font-size: 13px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 0;
-}
-.bottom-nav button.active {
-  color: #fff;
-  font-weight: 600;
-}
-.bottom-nav .icon {
-  font-size: 18px;
-}
+  /* --- 📊 Solver --- */
+  initSolver();
+});
 
-/* === Overlay / Berechnungsanzeige === */
-#overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.9);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-#overlay.show {
-  display: flex;
-}
-.overlay-box {
-  background: rgba(25, 27, 45, 0.95);
-  border-radius: 12px;
-  padding: 20px 24px;
-  text-align: center;
-  width: 260px;
-  box-shadow: 0 0 25px rgba(0,0,0,0.4);
-  animation: pulseBox 0.8s ease-in-out infinite alternate;
-}
-@keyframes pulseBox {
-  from { box-shadow: 0 0 15px rgba(52,111,255,0.2); }
-  to { box-shadow: 0 0 25px rgba(52,111,255,0.6); }
-}
-.overlay-logo {
-  width: 80px;
-  margin-bottom: 10px;
-}
-.overlay-title {
-  font-size: 16px;
-  color: #fff;
-  margin-bottom: 12px;
-}
+/* === 📊 Web-Worker Solver === */
+function initSolver() {
+  const solveBtn = document.getElementById("solveBtn"), summaryBox = document.getElementById("summary"), matrixBox = document.getElementById("matrix");
+  if(!solveBtn) return;
 
-/* Ladebalken animiert */
-.progress {
-  width: 100%;
-  height: 8px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 5px;
-  overflow: hidden;
-}
-.progress .bar {
-  width: 0%;
-  height: 100%;
-  background: linear-gradient(90deg, #4a82ff, #9eb7ff);
-  border-radius: 5px;
-  transition: width 5s linear;
-}
-@keyframes progressAnim {
-  0% { width: 0%; }
-  50% { width: 100%; }
-  100% { width: 0%; }
-}
+  const workerCode = `
+    self.onmessage = function(e) {
+      const { A, B, M, Nraw } = e.data;
+      const idxA = Object.fromEntries(A.map((n,i)=>[n,i])), idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
+      const m = A.length, n = B.length, NONE = n;
+      const forced = Array(m).fill(-1), forbidden = Array.from({length:m},()=>new Set());
+      M.forEach(t => { if(t.A in idxA && t.B in idxB) { if(t.type==="PM") forced[idxA[t.A]] = idxB[t.B]; else if(t.type==="NM") forbidden[idxA[t.A]].add(idxB[t.B]); } });
+      const nights = Nraw.map(nObj => ({ map: A.map(name => { const p = nObj.pairs.find(pair => pair.A === name); return (p && p.B in idxB) ? idxB[p.B] : NONE; }), beams: nObj.lights }));
+      const noneQuota = Math.max(0, m - n), dom = A.map((_,i) => { if(forced[i]!==-1) return new Set([forced[i]]); let s = new Set([...Array(n).keys()].filter(j => !forbidden[i].has(j))); if(noneQuota > 0) s.add(NONE); return s; });
+      const order = [...Array(m).keys()].sort((a,b)=>dom[a].size-dom[b].size);
+      const usedB = new Array(n).fill(false);
+      let usedNone = 0, total = 0n, assign = Array(m).fill(-1), counts = Array.from({length:m},()=>Array(n).fill(0n));
+      function prune() { for(const nt of nights) { let hits = 0, could = 0; for(let i=0; i<m; i++){ const target = nt.map[i], current = assign[i]; if(current !== -1) { if(current !== NONE && current === target) hits++; } else if(target !== NONE && !usedB[target] && dom[i].has(target)) could++; } if(nt.beams < hits || nt.beams > (hits + could)) return false; } return true; }
+      function dfs(pos) { if(pos === m) { if (usedNone === noneQuota) { total++; for(let i=0; i<m; i++) { if(assign[i]<n) counts[i][assign[i]]++; } } return; } const i = order[pos]; for(const j of dom[i]) { if(j===NONE) { if(usedNone < noneQuota) { assign[i]=NONE; usedNone++; if(prune()) dfs(pos+1); assign[i]=-1; usedNone--; } } else { if(!usedB[j]) { assign[i]=j; usedB[j]=true; if(prune()) dfs(pos+1); assign[i]=-1; usedB[j]=false; } } } }
+      dfs(0); self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString()))});
+    };
+  `;
 
-/* === Tabellen-Design (Matrix) === */
-.ayto-table-container {
-  overflow-x: auto;
-  border-radius: 10px;
-  margin-top: 10px;
-  box-shadow: 0 0 12px rgba(0,0,0,0.4);
-}
-.ayto-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  background: rgba(25, 27, 45, 0.9);
-}
-.ayto-table th, .ayto-table td {
-  padding: 6px 8px;
-  text-align: center;
-  border: 1px solid rgba(255,255,255,0.05);
-  color: #fff;
-  white-space: nowrap;
-}
-.ayto-table th {
-  background: rgba(35, 38, 60, 0.95);
-  font-weight: 600;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-.ayto-table .a-name {
-  text-align: left;
-  font-weight: 600;
-  background: rgba(35,38,60,0.9);
-  position: sticky;
-  left: 0;
-  z-index: 3;
-}
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  const workerUrl = URL.createObjectURL(blob);
 
-/* Tooltip in Matrix */
-.ayto-table td {
-  position: relative;
-}
-.ayto-tooltip {
-  visibility: hidden;
-  opacity: 0;
-  position: absolute;
-  background: rgba(0,0,0,0.85);
-  color: #fff;
-  padding: 3px 6px;
-  border-radius: 5px;
-  font-size: 11px;
-  bottom: 120%;
-  left: 50%;
-  transform: translateX(-50%);
-  transition: opacity 0.3s;
-  white-space: nowrap;
-}
-.ayto-table td:hover .ayto-tooltip {
-  visibility: visible;
-  opacity: 1;
-}
-
-/* === Inputs & Listen === */
-input[type="text"], select {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 6px;
-  color: #fff;
-  padding: 6px;
-  font-size: 14px;
-  width: 100%;
-}
-input::placeholder {
-  color: #777;
-}
-.list .row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-/* === Tags (Perfect Match etc.) === */
-.tag {
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 11px;
-  margin-left: 5px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.tag.good { background: #138a0e; color: #fff; }
-.tag.bad { background: #b92020; color: #fff; }
-.tag.neutral { background: #555; color: #fff; }
-
-/* === Timeline === */
-.timeline h3 {
-  border-bottom: 1px solid rgba(255,255,255,0.1);
-  padding-bottom: 4px;
-  margin-bottom: 6px;
-}
-.timeline .card {
-  background: rgba(35,38,60,0.9);
-  margin-bottom: 10px;
-  padding: 10px;
+  solveBtn.onclick = () => {
+    const {A, B} = getT(); if(A.length < 2) return alert("Bitte Teilnehmer anlegen!");
+    showOverlay();
+    const worker = new Worker(workerUrl);
+    worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
+    worker.onmessage = (e) => {
+      if(e.data.type === 'result') {
+        const total = BigInt(e.data.total), counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
+        summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} gültige Kombinationen</div>`;
+        let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
+        A.forEach((na, i) => {
+          html += `<tr><td style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
+          B.forEach((nb, j) => {
+            const p = total > 0n ? Number((counts[i][j]*10000n)/total) / 100 : 0;
+            if (p === 0) html += `<td class="no-match">No Match</td>`;
+            else html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;font-size:11px;min-width:75px">${p.toFixed(2)}%</td>`;
+          });
+          html += "</tr>";
+        });
+        matrixBox.innerHTML = html + "</table></div>"; matrixBox.style.display="block";
+        hideOverlay(); worker.terminate();
+      }
+    };
+  };
 }

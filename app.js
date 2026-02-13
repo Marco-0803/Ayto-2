@@ -186,91 +186,116 @@ function initSolver() {
         matrixBox = document.getElementById("matrix");
   if(!solveBtn) return;
 
-  const workerCode = `
-    self.onmessage = function(e) {
-      const { A, B, M, Nraw } = e.data;
-      const idxA = Object.fromEntries(A.map((n,i)=>[n,i])), idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
-      const m = A.length, n = B.length;
-      
-      const forced = Array(m).fill(-1);
-      const forbidden = Array.from({length:m},()=>new Set());
-      M.forEach(t => { 
-        if(t.A in idxA && t.B in idxB) { 
-          if(t.type==="PM") forced[idxA[t.A]] = idxB[t.B]; 
-          else if(t.type==="NM") forbidden[idxA[t.A]].add(idxB[t.B]); 
-        } 
-      });
+const workerCode = `
+self.onmessage = function(e) {
+  const { A, B, M, Nraw } = e.data;
+  const idxA = Object.fromEntries(A.map((n,i)=>[n,i]));
+  const idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
+  const m = A.length, n = B.length;
 
-      // Die Matching Nights werden als einfache Zuordnung gespeichert
-      const nights = Nraw.map(nObj => ({ 
-        pairs: nObj.pairs.map(p => ({
-          aIdx: idxA[p.A],
-          bIdx: idxB[p.B] // kann auch -1 sein, wenn 'keine'
-        })),
-        beams: nObj.lights 
-      }));
+  // forced[a] = b wenn PM gesetzt
+  const forced = Array(m).fill(-1);
+  const forbidden = Array.from({length:m}, ()=>new Set());
 
-      let total = 0n;
-      let counts = Array.from({length:m},()=>Array(n).fill(0n));
-      let currentAssign = Array.from({length:m}, () => []);
-      let usedB = new Array(n).fill(false);
+  M.forEach(t => {
+    if(!(t.A in idxA)) return;
+    if(!(t.B in idxB)) return;
+    const a = idxA[t.A], b = idxB[t.B];
+    if(t.type === "PM") forced[a] = b;
+    else if(t.type === "NM") forbidden[a].add(b);
+    // alles andere (z.B. "SOLD") ignorieren
+  });
 
-      function dfs(idxP, doubleWomanFound) {
-        if(idxP === m) {
-          if (!doubleWomanFound) return;
+  // Matching nights: bIdx = -1 wenn 'keine'
+  const nights = (Nraw || []).map(nObj => ({
+    pairs: (nObj.pairs || []).map(p => ({
+      aIdx: (p.A in idxA) ? idxA[p.A] : -1,
+      bIdx: (p.B === "keine") ? -1 : ((p.B in idxB) ? idxB[p.B] : -2)
+    })),
+    beams: Number(nObj.lights)
+  }));
 
-          // Check Matching Nights: Hier wird geschaut, ob die PMs der aktuellen Kombination 
-          // mit den Sitzplätzen der Nacht übereinstimmen
-          for(const nt of nights) {
-            let hits = 0;
-            for(const pair of nt.pairs) {
-              if(pair.aIdx !== undefined && pair.bIdx !== -1) {
-                // Ein Licht geht an, wenn der Partner aus der Nacht einer der PM-Partner ist
-                if(currentAssign[pair.aIdx].includes(pair.bIdx)) {
-                  hits++;
-                }
-              }
-            }
-            if(hits !== nt.beams) return;
-          }
-          total++;
-          for(let i=0; i<m; i++) {
-            currentAssign[i].forEach(bIdx => { counts[i][bIdx]++; });
-          }
-          return;
+  // Wenn irgendwo ein unbekannter Mann-Name in einer Night steht => keine Lösung möglich
+  for(const nt of nights){
+    for(const pr of nt.pairs){
+      if(pr.bIdx === -2) {
+        self.postMessage({type:'result', total:'0', counts: Array.from({length:m},()=>Array(n).fill('0'))});
+        return;
+      }
+    }
+  }
+
+  let total = 0n;
+  let counts = Array.from({length:m},()=>Array(n).fill(0n));
+
+  // assign[a] = b (genau ein Mann pro Frau)
+  let assign = Array(m).fill(-1);
+
+  // useCountB[b] = wie oft Mann verwendet wurde (0/1/2)
+  let useCountB = new Array(n).fill(0);
+
+  // Flag: wurde schon irgendein Mann 2x verwendet?
+  let doubleManUsed = false;
+
+  function dfs(aIdx){
+    if(aIdx === m){
+      // Bei 11F/10M muss genau ein Mann doppelt sein
+      if(!doubleManUsed) return;
+
+      // Matching Nights prüfen
+      for(const nt of nights){
+        let hits = 0;
+        for(const pair of nt.pairs){
+          if(pair.aIdx < 0) continue;         // unbekannte Frau ignorieren
+          if(pair.bIdx < 0) continue;         // 'keine' => nie Treffer
+          if(assign[pair.aIdx] === pair.bIdx) hits++;
         }
-
-        const forceJ = forced[idxP];
-        for(let j=0; j<n; j++) {
-          if(usedB[j] || forbidden[idxP].has(j)) continue;
-          if(forceJ !== -1 && forceJ !== j) continue;
-
-          // Normales Match
-          usedB[j] = true;
-          currentAssign[idxP].push(j);
-          dfs(idxP + 1, doubleWomanFound);
-          
-          // Double-Shot Match (Nur wenn diese Frau noch nicht als Double-Shot definiert wurde)
-          if (!doubleWomanFound) {
-            for(let k = j + 1; k < n; k++) {
-              if(usedB[k] || forbidden[idxP].has(k)) continue;
-              usedB[k] = true;
-              currentAssign[idxP].push(k);
-              dfs(idxP + 1, true);
-              currentAssign[idxP].pop();
-              usedB[k] = false;
-            }
-          }
-
-          currentAssign[idxP].pop();
-          usedB[j] = false;
-        }
+        if(hits !== nt.beams) return;
       }
 
-      dfs(0, false);
-      self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString()))});
-    };
-  `;
+      total++;
+      for(let i=0;i<m;i++){
+        const b = assign[i];
+        if(b >= 0) counts[i][b]++;
+      }
+      return;
+    }
+
+    // Kandidaten-Männer für diese Frau
+    const forceB = forced[aIdx];
+
+    for(let b=0;b<n;b++){
+      if(forbidden[aIdx].has(b)) continue;
+      if(forceB !== -1 && forceB !== b) continue;
+
+      // Regel: jeder Mann max 1x, außer genau EIN Mann darf 2x
+      if(useCountB[b] >= 2) continue;
+      if(useCountB[b] === 1 && doubleManUsed) continue; // zweites "Doppeln" verboten
+
+      // setzen
+      const prevDouble = doubleManUsed;
+      useCountB[b]++;
+      if(useCountB[b] === 2) doubleManUsed = true;
+
+      assign[aIdx] = b;
+      dfs(aIdx+1);
+
+      // zurücksetzen
+      assign[aIdx] = -1;
+      if(useCountB[b] === 2) doubleManUsed = prevDouble; // vor dem Decrement war es 2
+      useCountB[b]--;
+    }
+  }
+
+  dfs(0);
+
+  self.postMessage({
+    type:'result',
+    total: total.toString(),
+    counts: counts.map(r=>r.map(c=>c.toString()))
+  });
+};
+`;
 
   const blob = new Blob([workerCode], { type: 'application/javascript' });
   const workerUrl = URL.createObjectURL(blob);

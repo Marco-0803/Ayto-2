@@ -170,11 +170,11 @@ document.addEventListener("DOMContentLoaded", () => {
     renderNights();
   }
 
-  /* --- 📊 Solver --- */
+  /* --- 📊 Solver Initialisierung --- */
   initSolver();
 });
 
-/* === 📊 Web-Worker Solver === */
+/* === 📊 Web-Worker Solver mit Animation === */
 function initSolver() {
   const solveBtn = document.getElementById("solveBtn"), summaryBox = document.getElementById("summary"), matrixBox = document.getElementById("matrix");
   if(!solveBtn) return;
@@ -202,25 +202,35 @@ function initSolver() {
 
   solveBtn.onclick = () => {
     const {A, B} = getT(); if(A.length < 2) return alert("Bitte Teilnehmer anlegen!");
+    
     showOverlay();
+    const startTime = Date.now();
+    
     const worker = new Worker(workerUrl);
     worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
+    
     worker.onmessage = (e) => {
       if(e.data.type === 'result') {
-        const total = BigInt(e.data.total), counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
-        summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} gültige Kombinationen</div>`;
-        let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
-        A.forEach((na, i) => {
-          html += `<tr><td style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
-          B.forEach((nb, j) => {
-            const p = total > 0n ? Number((counts[i][j]*10000n)/total) / 100 : 0;
-            if (p === 0) html += `<td class="no-match">No Match</td>`;
-            else html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;font-size:11px;min-width:75px">${p.toFixed(2)}%</td>`;
+        const duration = Date.now() - startTime;
+        const delay = Math.max(0, 3000 - duration);
+
+        setTimeout(() => {
+          const total = BigInt(e.data.total), counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
+          summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} gültige Kombinationen</div>`;
+          
+          let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
+          A.forEach((na, i) => {
+            html += `<tr><td style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${na}</td>`;
+            B.forEach((nb, j) => {
+              const p = total > 0n ? Number((counts[i][j]*10000n)/total) / 100 : 0;
+              if (p === 0) html += `<td class="no-match">No Match</td>`;
+              else html += `<td style="background:hsl(${260-(p*2)},70%,${20+p*0.3}%);color:white;text-align:center;font-size:11px;min-width:75px">${p.toFixed(2)}%</td>`;
+            });
+            html += "</tr>";
           });
-          html += "</tr>";
-        });
-        matrixBox.innerHTML = html + "</table></div>"; matrixBox.style.display="block";
-        hideOverlay(); worker.terminate();
+          matrixBox.innerHTML = html + "</table></div>"; matrixBox.style.display="block";
+          hideOverlay(); worker.terminate();
+        }, delay);
       }
     };
   };

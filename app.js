@@ -5,17 +5,14 @@
     const version = meta ? meta.content : null;
     const last = localStorage.getItem('aytoAppVersion');
     if (version && version !== last) {
-      const preservedKeys = ["aytoAppVersion"];
-      const keys = Object.keys(localStorage);
-      for (const k of keys) { if (!preservedKeys.includes(k)) localStorage.removeItem(k); }
       localStorage.setItem('aytoAppVersion', version);
-      if ('caches' in window) { caches.keys().then(keys => keys.forEach(k => caches.delete(k))); }
+      if ('caches' in window) caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
       location.reload(true);
     }
   } catch (e) { console.warn("Fehler beim Auto-Update:", e); }
 })();
 
-/* === 🌐 Navigation & Overlay === */
+/* === 🌐 Navigation & Globale Helfer === */
 (function(){
   const nav = document.getElementById('nav');
   const pages = document.querySelectorAll('.page');
@@ -47,7 +44,7 @@ function saveT(data) { localStorage.setItem(STORAGE_KEY_T, JSON.stringify(data))
 function createPersonUI(name, group, listEl) {
   const div = document.createElement("div");
   div.className = "row";
-  div.innerHTML = `<input type="text" value="${name}" style="flex:1"><button class="danger small">✖</button>`;
+  div.innerHTML = `<input type="text" value="${name}" placeholder="Name" style="flex:1"><button class="danger small">✖</button>`;
   const inp = div.querySelector("input");
   inp.oninput = () => {
     const A = [...document.getElementById("listA").querySelectorAll("input")].map(i=>i.value.trim()).filter(Boolean);
@@ -117,7 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
   refreshDropdowns(); renderMB();
 });
 
-/* === 🌙 Matching Nights === */
+/* === 🌙 Matching Nights (Mit intelligenter Auswahl) === */
 document.addEventListener("DOMContentLoaded", () => {
   const addNightBtn = document.getElementById("addNight"), nightsList = document.getElementById("nights");
   if(!nightsList) return;
@@ -129,7 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const div = document.createElement("div"); div.className="card stack";
       div.innerHTML = `<div class="row" style="justify-content:space-between"><strong>Night ${i+1}</strong><button class="danger small">✖</button></div>
         <div class="small muted">Lichter: ${n.lights}</div>
-        <table style="width:100%;font-size:12px">${n.pairs.map(p=>`<tr><td>${p.A}</td><td>×</td><td>${p.B}</td></tr>`).join("")}</table>`;
+        <table style="width:100%;font-size:12px">${n.pairs.map(p=>`<tr><td>${p.A}</td><td>×</td><td>${p.B === 'keine' ? '<i>Kein Partner</i>' : p.B}</td></tr>`).join("")}</table>`;
       div.querySelector("button").onclick = () => { nights.splice(i,1); localStorage.setItem("aytoMatchingNights", JSON.stringify(nights)); renderNights(); };
       nightsList.appendChild(div);
     });
@@ -137,29 +134,48 @@ document.addEventListener("DOMContentLoaded", () => {
 
   addNightBtn.onclick = () => {
     const {A, B} = getT(); if(!A.length || !B.length) return alert("Teilnehmer fehlen!");
-    const ov = document.createElement("div"); ov.style="position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px";
-    const box = document.createElement("div"); box.className="card stack"; box.style="max-width:400px;width:100%;max-height:90vh;overflow-y:auto;background:#171a2b";
-    box.innerHTML = `<h3>Matching Night</h3>`;
+    const ov = document.createElement("div"); ov.style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:10000;display:flex;align-items:center;justify-content:center;padding:15px";
+    const box = document.createElement("div"); box.className="card stack"; box.style="max-width:450px;width:100%;max-height:95vh;overflow-y:auto;background:#171a2b;padding:20px;border:1px solid #333";
+    box.innerHTML = `<h3 style="margin-top:0">Matching Night</h3>`;
     
-    const selects = A.map(name => {
-      const row = document.createElement("div"); row.className="row"; row.style="margin-bottom:8px";
-      row.innerHTML = `<span style="flex:1">${name}</span>`;
-      const sel = document.createElement("select"); sel.style="flex:1";
-      sel.innerHTML = `<option value="keine">— Partner —</option>` + B.map(bn=>`<option value="${bn}">${bn}</option>`).join("");
-      row.appendChild(sel); box.appendChild(row); return {A: name, sel};
+    const pairRows = [];
+    const updateSelects = () => {
+      const usedB = pairRows.map(r => r.sel.value).filter(v => v !== "keine");
+      pairRows.forEach(row => {
+        const current = row.sel.value;
+        let html = `<option value="keine">Kein Partner</option>`;
+        B.forEach(nameB => {
+          if (!usedB.includes(nameB) || nameB === current) {
+            html += `<option value="${nameB}" ${nameB === current ? 'selected' : ''}>${nameB}</option>`;
+          }
+        });
+        row.sel.innerHTML = html;
+      });
+    };
+
+    A.forEach(nameA => {
+      const row = document.createElement("div"); row.style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px";
+      row.innerHTML = `<span style="font-size:14px;font-weight:bold;flex:1">${nameA}</span>`;
+      const sel = document.createElement("select"); sel.style="flex:1.5;padding:8px";
+      sel.onchange = updateSelects;
+      row.appendChild(sel); box.appendChild(row);
+      pairRows.push({A: nameA, sel});
     });
 
-    const lRow = document.createElement("div"); lRow.className="row";
-    lRow.innerHTML = `<span>Lichter:</span><input type="number" value="0" min="0" max="${A.length}" style="width:60px">`;
+    updateSelects();
+
+    const lRow = document.createElement("div"); lRow.className="row"; lRow.style="margin-top:15px;padding-top:15px;border-top:1px solid #333";
+    lRow.innerHTML = `<span>Lichter:</span><input type="number" value="0" min="0" max="${A.length}" style="width:70px;padding:8px">`;
     box.appendChild(lRow);
 
-    const sBtn = document.createElement("button"); sBtn.className="primary"; sBtn.textContent="Speichern";
-    const cBtn = document.createElement("button"); cBtn.className="ghost"; cBtn.textContent="Abbrechen";
-    box.appendChild(sBtn); box.appendChild(cBtn); ov.appendChild(box); document.body.appendChild(ov);
+    const btnRow = document.createElement("div"); btnRow.className="row"; btnRow.style="margin-top:20px";
+    const sBtn = document.createElement("button"); sBtn.className="primary"; sBtn.style="flex:1"; sBtn.textContent="Speichern";
+    const cBtn = document.createElement("button"); cBtn.className="ghost"; sBtn.style="flex:1"; cBtn.textContent="Abbrechen";
+    btnRow.appendChild(sBtn); btnRow.appendChild(cBtn); box.appendChild(btnRow); ov.appendChild(box); document.body.appendChild(ov);
 
     cBtn.onclick = () => ov.remove();
     sBtn.onclick = () => {
-      const pairs = selects.map(s=>({A: s.A, B: s.sel.value})).filter(p=>p.B!=="keine");
+      const pairs = pairRows.map(r=>({A: r.A, B: r.sel.value}));
       const nights = JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]");
       nights.push({pairs, lights: parseInt(lRow.querySelector("input").value)});
       localStorage.setItem("aytoMatchingNights", JSON.stringify(nights));
@@ -169,7 +185,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderNights();
 });
 
-/* === 📊 Web-Worker Solver (Vollständig) === */
+/* === 📊 Web-Worker Solver === */
 window.addEventListener("DOMContentLoaded", () => {
   const solveBtn = document.getElementById("solveBtn"), summaryBox = document.getElementById("summary"), matrixBox = document.getElementById("matrix");
   if(!solveBtn) return;
@@ -210,21 +226,23 @@ window.addEventListener("DOMContentLoaded", () => {
 
       function prune() {
         for(const nt of nights) {
-          let fixed = 0, could = 0;
+          let hits = 0, could = 0;
           for(let i=0; i<m; i++){
-            const w = nt.map[i], a = assign[i];
-            if(a!==-1) { if(a!==NONE && a===w) fixed++; }
-            else if(w!==NONE && !usedB[w] && dom[i].has(w)) could++;
+            const target = nt.map[i], current = assign[i];
+            if(current !== -1) { if(current !== NONE && current === target) hits++; }
+            else if(target !== NONE && !usedB[target] && dom[i].has(target)) could++;
           }
-          if(nt.beams < fixed || nt.beams > (fixed+could)) return false;
+          if(nt.beams < hits || nt.beams > (hits + could)) return false;
         }
         return true;
       }
 
       function dfs(pos) {
         if(pos === m) {
-          total++;
-          for(let i=0; i<m; i++) { if(assign[i]<n) counts[i][assign[i]]++; }
+          if (usedNone === noneQuota) {
+            total++;
+            for(let i=0; i<m; i++) { if(assign[i]<n) counts[i][assign[i]]++; }
+          }
           return;
         }
         const i = order[pos];
@@ -235,7 +253,7 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       }
       dfs(0);
-      self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString())), duration: 0});
+      self.postMessage({type:'result', total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString()))});
     };
   `;
 
@@ -243,20 +261,21 @@ window.addEventListener("DOMContentLoaded", () => {
   const workerUrl = URL.createObjectURL(blob);
 
   solveBtn.onclick = () => {
-    const {A, B} = getT(); if(A.length < 2) return alert("Teilnehmer fehlen!");
+    const {A, B} = getT(); if(A.length < 2) return alert("Bitte Teilnehmer anlegen!");
     showOverlay();
     const worker = new Worker(workerUrl);
     worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
     worker.onmessage = (e) => {
       if(e.data.type === 'result') {
         const total = BigInt(e.data.total), counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
-        summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} Kombinationen</div>`;
+        summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total.toString()} gültige Kombinationen</div>`;
         let html = `<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>${B.map(b=>`<th>${b}</th>`).join("")}</tr>`;
         A.forEach((na, i) => {
-          html += `<tr><td>${na}</td>`;
+          html += `<tr><td style="position:sticky;left:0;background:#23283f;font-weight:bold">${na}</td>`;
           B.forEach((nb, j) => {
             const p = total > 0n ? Number((counts[i][j]*10000n)/total)/100 : 0;
-            html += `<td style="background:hsl(${p*1.2},70%,30%);color:white">${p.toFixed(2)}%</td>`;
+            const bg = `hsl(${p*1.2}, 70%, ${20 + p*0.3}%)`;
+            html += `<td style="background:${bg};color:white;text-align:center">${p.toFixed(2)}%</td>`;
           });
           html += "</tr>";
         });

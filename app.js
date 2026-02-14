@@ -75,15 +75,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const preBtn = document.getElementById("prefill");
     if(preBtn) {
-        preBtn.onclick = () => {
-          const A = ["Adrianna", "Alicia", "Aurora", "Elena", "Ella", "Laura", "Linda", "Marla", "Michelle", "Tiziana", "Tonia"];
-          const B = ["Chris", "Ema", "Evi", "Jeronymo", "Jerry", "Julian.M", "Julian.S", "Luke", "Meji", "Noel"];
-          listA.innerHTML = ""; listB.innerHTML = "";
-          A.forEach(n => createPersonUI(n, "A", "listA"));
-          B.forEach(n => createPersonUI(n, "B", "listB"));
-          saveT({A, B});
-          preBtn.textContent = "✅ Staffel 2026 geladen"; preBtn.disabled = true;
-        };
+      preBtn.onclick = () => {
+        const A = ["Adrianna", "Alicia", "Aurora", "Elena", "Ella", "Laura", "Linda", "Marla", "Michelle", "Tiziana", "Tonia"];
+        const B = ["Chris", "Ema", "Evi", "Jeronymo", "Jerry", "Julian.M", "Julian.S", "Luke", "Meji", "Noel"];
+        listA.innerHTML = ""; listB.innerHTML = "";
+        A.forEach(n => createPersonUI(n, "A", "listA"));
+        B.forEach(n => createPersonUI(n, "B", "listB"));
+        saveT({A, B});
+        preBtn.textContent = "✅ Staffel 2026 geladen"; preBtn.disabled = true;
+      };
     }
   }
 
@@ -192,8 +192,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
+      const timestamp = new Date().toLocaleDateString('de-DE').replace(/\./g, '-');
       a.href = url;
-      a.download = `AYTO_Data_Export.json`;
+      a.download = `AYTO_Backup_${timestamp}.json`;
       a.click();
       URL.revokeObjectURL(url);
     };
@@ -213,7 +214,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (imported.nights) localStorage.setItem("aytoMatchingNights", JSON.stringify(imported.nights));
           alert("Erfolgreich importiert!");
           location.reload();
-        } catch (err) { alert("Import-Fehler!"); }
+        } catch (err) { alert("Import-Fehler! Ungültige Datei."); }
       };
       reader.readAsText(file);
     };
@@ -221,7 +222,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (resetBtn) {
     resetBtn.onclick = () => {
-      if (confirm("Wirklich alles löschen?")) {
+      if (confirm("Möchtest du wirklich alle Daten löschen?")) {
         localStorage.clear();
         location.reload();
       }
@@ -230,126 +231,100 @@ document.addEventListener("DOMContentLoaded", () => {
 
   initSolver();
 
-}); // Ende des DOMContentLoaded
+}); // Ende Haupt-Initialisierung
 
-
-/* === 📊 Solver für 11 Frauen & 10 Männer (Jede Frau kann Doppel-Match sein) === */
+/* === 📊 Solver === */
 function initSolver() {
   const solveBtn = document.getElementById("solveBtn"), 
         summaryBox = document.getElementById("summary"), 
         matrixBox = document.getElementById("matrix");
   if(!solveBtn) return;
 
-const workerCode = `
-self.onmessage = function(e) {
-  const { A, B, M, Nraw } = e.data;
-  const idxA = Object.fromEntries(A.map((n,i)=>[n,i]));
-  const idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
-  const m = A.length, n = B.length;
+  const workerCode = `
+    self.onmessage = function(e) {
+      const { A, B, M, Nraw } = e.data;
+      const idxA = Object.fromEntries(A.map((n,i)=>[n,i]));
+      const idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
+      const m = A.length, n = B.length;
 
-  // forced[a] = b wenn PM gesetzt
-  const forced = Array(m).fill(-1);
-  const forbidden = Array.from({length:m}, ()=>new Set());
+      const forced = Array(m).fill(-1);
+      const forbidden = Array.from({length:m}, ()=>new Set());
 
-  M.forEach(t => {
-    if(!(t.A in idxA)) return;
-    if(!(t.B in idxB)) return;
-    const a = idxA[t.A], b = idxB[t.B];
-    if(t.type === "PM") forced[a] = b;
-    else if(t.type === "NM") forbidden[a].add(b);
-    // alles andere (z.B. "SOLD") ignorieren
-  });
+      M.forEach(t => {
+        if(!(t.A in idxA)) return;
+        if(!(t.B in idxB)) return;
+        const a = idxA[t.A], b = idxB[t.B];
+        if(t.type === "PM") forced[a] = b;
+        else if(t.type === "NM") forbidden[a].add(b);
+      });
 
-  // Matching nights: bIdx = -1 wenn 'keine'
-  const nights = (Nraw || []).map(nObj => ({
-    pairs: (nObj.pairs || []).map(p => ({
-      aIdx: (p.A in idxA) ? idxA[p.A] : -1,
-      bIdx: (p.B === "keine") ? -1 : ((p.B in idxB) ? idxB[p.B] : -2)
-    })),
-    beams: Number(nObj.lights)
-  }));
+      const nights = (Nraw || []).map(nObj => ({
+        pairs: (nObj.pairs || []).map(p => ({
+          aIdx: (p.A in idxA) ? idxA[p.A] : -1,
+          bIdx: (p.B === "keine") ? -1 : ((p.B in idxB) ? idxB[p.B] : -2)
+        })),
+        beams: Number(nObj.lights)
+      }));
 
-  // Wenn irgendwo ein unbekannter Mann-Name in einer Night steht => keine Lösung möglich
-  for(const nt of nights){
-    for(const pr of nt.pairs){
-      if(pr.bIdx === -2) {
-        self.postMessage({type:'result', total:'0', counts: Array.from({length:m},()=>Array(n).fill('0'))});
-        return;
-      }
-    }
-  }
-
-  let total = 0n;
-  let counts = Array.from({length:m},()=>Array(n).fill(0n));
-
-  // assign[a] = b (genau ein Mann pro Frau)
-  let assign = Array(m).fill(-1);
-
-  // useCountB[b] = wie oft Mann verwendet wurde (0/1/2)
-  let useCountB = new Array(n).fill(0);
-
-  // Flag: wurde schon irgendein Mann 2x verwendet?
-  let doubleManUsed = false;
-
-  function dfs(aIdx){
-    if(aIdx === m){
-      // Bei 11F/10M muss genau ein Mann doppelt sein
-      if(!doubleManUsed) return;
-
-      // Matching Nights prüfen
       for(const nt of nights){
-        let hits = 0;
-        for(const pair of nt.pairs){
-          if(pair.aIdx < 0) continue;         // unbekannte Frau ignorieren
-          if(pair.bIdx < 0) continue;         // 'keine' => nie Treffer
-          if(assign[pair.aIdx] === pair.bIdx) hits++;
+        for(const pr of nt.pairs){
+          if(pr.bIdx === -2) {
+            self.postMessage({type:'result', total:'0', counts: Array.from({length:m},()=>Array(n).fill('0'))});
+            return;
+          }
         }
-        if(hits !== nt.beams) return;
       }
 
-      total++;
-      for(let i=0;i<m;i++){
-        const b = assign[i];
-        if(b >= 0) counts[i][b]++;
+      let total = 0n;
+      let counts = Array.from({length:m},()=>Array(n).fill(0n));
+      let assign = Array(m).fill(-1);
+      let useCountB = new Array(n).fill(0);
+      let doubleManUsed = false;
+
+      function dfs(aIdx){
+        if(aIdx === m){
+          if(!doubleManUsed) return;
+          for(const nt of nights){
+            let hits = 0;
+            for(const pair of nt.pairs){
+              if(pair.aIdx < 0 || pair.bIdx < 0) continue;
+              if(assign[pair.aIdx] === pair.bIdx) hits++;
+            }
+            if(hits !== nt.beams) return;
+          }
+          total++;
+          for(let i=0;i<m;i++){
+            const b = assign[i];
+            if(b >= 0) counts[i][b]++;
+          }
+          return;
+        }
+
+        const forceB = forced[aIdx];
+        for(let b=0;b<n;b++){
+          if(forbidden[aIdx].has(b)) continue;
+          if(forceB !== -1 && forceB !== b) continue;
+          if(useCountB[b] >= 2) continue;
+          if(useCountB[b] === 1 && doubleManUsed) continue;
+
+          const prevDouble = doubleManUsed;
+          useCountB[b]++;
+          if(useCountB[b] === 2) doubleManUsed = true;
+          assign[aIdx] = b;
+          dfs(aIdx+1);
+          assign[aIdx] = -1;
+          if(useCountB[b] === 2) doubleManUsed = prevDouble;
+          useCountB[b]--;
+        }
       }
-      return;
-    }
-
-    // Kandidaten-Männer für diese Frau
-    const forceB = forced[aIdx];
-
-    for(let b=0;b<n;b++){
-      if(forbidden[aIdx].has(b)) continue;
-      if(forceB !== -1 && forceB !== b) continue;
-
-      // Regel: jeder Mann max 1x, außer genau EIN Mann darf 2x
-      if(useCountB[b] >= 2) continue;
-      if(useCountB[b] === 1 && doubleManUsed) continue; // zweites "Doppeln" verboten
-
-      // setzen
-      const prevDouble = doubleManUsed;
-      useCountB[b]++;
-      if(useCountB[b] === 2) doubleManUsed = true;
-
-      assign[aIdx] = b;
-      dfs(aIdx+1);
-
-      // zurücksetzen
-      assign[aIdx] = -1;
-      if(useCountB[b] === 2) doubleManUsed = prevDouble; // vor dem Decrement war es 2
-      useCountB[b]--;
-    }
-  }
-
-  dfs(0);
-
-  self.postMessage({
-    type:'result',
-    total: total.toString(),
-    counts: counts.map(r=>r.map(c=>c.toString()))
-  });
-};
-`;
+      dfs(0);
+      self.postMessage({
+        type:'result',
+        total: total.toString(),
+        counts: counts.map(r=>r.map(c=>c.toString()))
+      });
+    };
+  `;
 
   const blob = new Blob([workerCode], { type: 'application/javascript' });
   const workerUrl = URL.createObjectURL(blob);
@@ -358,7 +333,11 @@ self.onmessage = function(e) {
     const {A, B} = getT(); if(A.length < 2) return alert("Daten unvollständig!");
     showOverlay();
     const worker = new Worker(workerUrl);
-    worker.postMessage({A, B, M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")});
+    worker.postMessage({
+      A, B, 
+      M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), 
+      Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")
+    });
     
     worker.onmessage = (e) => {
       const total = BigInt(e.data.total);
@@ -374,7 +353,6 @@ self.onmessage = function(e) {
         B.forEach((nameB, j) => {
           const count = counts[i][j];
           const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
-          
           if (p >= 100) {
             html += '<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>';
           } else if (count === 0n) {
@@ -391,70 +369,5 @@ self.onmessage = function(e) {
       hideOverlay();
       worker.terminate();
     };
-  };/* === 💾 Daten-Sicherung (Export & Import) === */
-document.addEventListener("DOMContentLoaded", () => {
-  const exportBtn = document.getElementById("exportBtn");
-  const importBtn = document.getElementById("importBtn");
-  const importFile = document.getElementById("importFile");
-  const resetBtn = document.getElementById("resetBtn");
-
-  // EXPORT: Erstellt eine JSON-Datei aus allen LocalStorage-Daten
-  if (exportBtn) {
-    exportBtn.onclick = () => {
-      const data = {
-        teilnehmer: JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[], "B":[]}'),
-        matchbox: JSON.parse(localStorage.getItem("aytoMatchbox") || "[]"),
-        nights: JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]")
-      };
-      
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      
-      const timestamp = new Date().toLocaleDateString('de-DE').replace(/\./g, '-');
-      a.href = url;
-      a.download = `AYTO_Backup_${timestamp}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    };
-  }
-
-  // IMPORT: Öffnet den Datei-Dialog
-  if (importBtn && importFile) {
-    importBtn.onclick = () => importFile.click();
-
-    importFile.onchange = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const imported = JSON.parse(event.target.result);
-          
-          // Daten in den LocalStorage schreiben
-          if (imported.teilnehmer) localStorage.setItem("aytoTeilnehmer", JSON.stringify(imported.teilnehmer));
-          if (imported.matchbox) localStorage.setItem("aytoMatchbox", JSON.stringify(imported.matchbox));
-          if (imported.nights) localStorage.setItem("aytoMatchingNights", JSON.stringify(imported.nights));
-          
-          alert("Daten erfolgreich importiert!");
-          location.reload(); // Seite neu laden, um Daten anzuzeigen
-        } catch (err) {
-          alert("Fehler: Ungültige Datei-Format.");
-          console.error(err);
-        }
-      };
-      reader.readAsText(file);
-    };
-  }
-
-  // RESET: Alles löschen
-  if (resetBtn) {
-    resetBtn.onclick = () => {
-      if (confirm("Möchtest du wirklich ALLE Daten (Teilnehmer, Nächte, Matchbox) löschen?")) {
-        localStorage.clear();
-        location.reload();
-      }
-    };
-  }
-});
+  };
+}

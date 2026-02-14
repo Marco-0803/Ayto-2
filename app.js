@@ -74,15 +74,17 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("addB").onclick = () => createPersonUI("", "B", "listB");
 
     const preBtn = document.getElementById("prefill");
-    preBtn.onclick = () => {
-      const A = ["Adrianna", "Alicia", "Aurora", "Elena", "Ella", "Laura", "Linda", "Marla", "Michelle", "Tiziana", "Tonia"];
-      const B = ["Chris", "Ema", "Evi", "Jeronymo", "Jerry", "Julian.M", "Julian.S", "Luke", "Meji", "Noel"];
-      listA.innerHTML = ""; listB.innerHTML = "";
-      A.forEach(n => createPersonUI(n, "A", "listA"));
-      B.forEach(n => createPersonUI(n, "B", "listB"));
-      saveT({A, B});
-      preBtn.textContent = "✅ Staffel 2026 geladen"; preBtn.disabled = true;
-    };
+    if(preBtn) {
+        preBtn.onclick = () => {
+          const A = ["Adrianna", "Alicia", "Aurora", "Elena", "Ella", "Laura", "Linda", "Marla", "Michelle", "Tiziana", "Tonia"];
+          const B = ["Chris", "Ema", "Evi", "Jeronymo", "Jerry", "Julian.M", "Julian.S", "Luke", "Meji", "Noel"];
+          listA.innerHTML = ""; listB.innerHTML = "";
+          A.forEach(n => createPersonUI(n, "A", "listA"));
+          B.forEach(n => createPersonUI(n, "B", "listB"));
+          saveT({A, B});
+          preBtn.textContent = "✅ Staffel 2026 geladen"; preBtn.disabled = true;
+        };
+    }
   }
 
   /* --- 💞 Matchbox --- */
@@ -174,10 +176,62 @@ document.addEventListener("DOMContentLoaded", () => {
     renderNights();
   }
 
-  // WICHTIG: Hier rufen wir den Solver auf!
+  /* --- 💾 Daten-Sicherung (Export, Import & Reset) --- */
+  const exportBtn = document.getElementById("exportBtn");
+  const importBtn = document.getElementById("importBtn");
+  const importFile = document.getElementById("importFile");
+  const resetBtn = document.getElementById("resetBtn");
+
+  if (exportBtn) {
+    exportBtn.onclick = () => {
+      const data = {
+        teilnehmer: getT(),
+        matchbox: JSON.parse(localStorage.getItem("aytoMatchbox") || "[]"),
+        nights: JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]")
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `AYTO_Data_Export.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  }
+
+  if (importBtn && importFile) {
+    importBtn.onclick = () => importFile.click();
+    importFile.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const imported = JSON.parse(ev.target.result);
+          if (imported.teilnehmer) localStorage.setItem(STORAGE_KEY_T, JSON.stringify(imported.teilnehmer));
+          if (imported.matchbox) localStorage.setItem("aytoMatchbox", JSON.stringify(imported.matchbox));
+          if (imported.nights) localStorage.setItem("aytoMatchingNights", JSON.stringify(imported.nights));
+          alert("Erfolgreich importiert!");
+          location.reload();
+        } catch (err) { alert("Import-Fehler!"); }
+      };
+      reader.readAsText(file);
+    };
+  }
+
+  if (resetBtn) {
+    resetBtn.onclick = () => {
+      if (confirm("Wirklich alles löschen?")) {
+        localStorage.clear();
+        location.reload();
+      }
+    };
+  }
+
   initSolver();
 
-}); // <-- Hier endet der DOMContentLoaded-Block jetzt SAUBER.
+}); // Ende des DOMContentLoaded
+
 
 /* === 📊 Solver für 11 Frauen & 10 Männer (Jede Frau kann Doppel-Match sein) === */
 function initSolver() {

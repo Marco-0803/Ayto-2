@@ -338,4 +338,82 @@ self.onmessage = function(e) {
       worker.terminate();
     };
   };
+  /* === 💾 Daten-Sicherung (Export & Import) === */
+
+// Hilfsfunktion: Alle App-Daten sammeln
+function getFullAppData() {
+  return {
+    teilnehmer: JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[], "B":[]}'),
+    matchbox: JSON.parse(localStorage.getItem("aytoMatchbox") || "[]"),
+    nights: JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]")
+  };
+}
+
+// EXPORT: Erstellt eine .json Datei und triggert den Download
+function exportData() {
+  const data = JSON.stringify(getFullAppData(), null, 2);
+  const blob = new Blob([data], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement("a");
+  const date = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `AYTO_Backup_${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// IMPORT: Liest eine Datei ein und überschreibt den LocalStorage
+function importData() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+  
+  input.onchange = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = event => {
+      try {
+        const imported = JSON.parse(event.target.result);
+        
+        // Validierung & Speichern
+        if (imported.teilnehmer) localStorage.setItem("aytoTeilnehmer", JSON.stringify(imported.teilnehmer));
+        if (imported.matchbox) localStorage.setItem("aytoMatchbox", JSON.stringify(imported.matchbox));
+        if (imported.nights) localStorage.setItem("aytoMatchingNights", JSON.stringify(imported.nights));
+        
+        alert("Daten erfolgreich importiert! Die App wird neu geladen.");
+        location.reload(); 
+      } catch (err) {
+        alert("Fehler beim Importieren: Ungültige Datei.");
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// RESET: Löscht alle Daten (für den roten Button)
+function resetData() {
+  if(confirm("Möchtest du wirklich alle Daten löschen? Dies kann nicht rückgängig gemacht werden.")) {
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+// Event-Listener an die Buttons binden (innerhalb oder nach DOMContentLoaded)
+document.addEventListener("DOMContentLoaded", () => {
+  const btnExport = document.querySelector('button[onclick="exportData()"]') || document.getElementById('exportBtn');
+  const btnImport = document.querySelector('button[onclick="importData()"]') || document.getElementById('importBtn');
+  const btnReset = document.querySelector('button.danger[style*="background-color: #d32f2f"]') || document.querySelector('button[onclick="resetData()"]');
+
+  // Falls du IDs in deinem HTML hast, nutze diese, sonst binden wir sie hier manuell:
+  // Beispiel für die Buttons aus deinem Screenshot:
+  const footerButtons = document.querySelectorAll('.card .row button');
+  footerButtons.forEach(btn => {
+    if (btn.textContent.includes("Export")) btn.onclick = exportData;
+    if (btn.textContent.includes("Import")) btn.onclick = importData;
+    if (btn.textContent.includes("Zurücksetzen")) btn.onclick = resetData;
+  });
+});
+
 }

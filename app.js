@@ -233,26 +233,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
 }); // Ende Haupt-Initialisierung
 
-/* === 📊 Solver === */
-function initSolver() {
-  const solveBtn = document.getElementById("solveBtn"), 
-        summaryBox = document.getElementById("summary"), 
+/* === 📊 Solver === */function initSolver() {
+  const solveBtn = document.getElementById("solveBtn"),
+        summaryBox = document.getElementById("summary"),
         matrixBox = document.getElementById("matrix");
-  if(!solveBtn) return;
+  if (!solveBtn) return;
 
+  // Der Worker-Code bleibt im Kern gleich, rechnet aber nur einen Teilbereich
   const workerCode = `
     self.onmessage = function(e) {
-      const { A, B, M, Nraw } = e.data;
+      const { A, B, M, Nraw, startBIdx } = e.data;
       const idxA = Object.fromEntries(A.map((n,i)=>[n,i]));
       const idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
       const m = A.length, n = B.length;
 
       const forced = Array(m).fill(-1);
       const forbidden = Array.from({length:m}, ()=>new Set());
-
       M.forEach(t => {
-        if(!(t.A in idxA)) return;
-        if(!(t.B in idxB)) return;
+        if(!(t.A in idxA) || !(t.B in idxB)) return;
         const a = idxA[t.A], b = idxB[t.B];
         if(t.type === "PM") forced[a] = b;
         else if(t.type === "NM") forbidden[a].add(b);
@@ -262,18 +260,9 @@ function initSolver() {
         pairs: (nObj.pairs || []).map(p => ({
           aIdx: (p.A in idxA) ? idxA[p.A] : -1,
           bIdx: (p.B === "keine") ? -1 : ((p.B in idxB) ? idxB[p.B] : -2)
-        })),
+        })).filter(p => p.aIdx !== -1),
         beams: Number(nObj.lights)
       }));
-
-      for(const nt of nights){
-        for(const pr of nt.pairs){
-          if(pr.bIdx === -2) {
-            self.postMessage({type:'result', total:'0', counts: Array.from({length:m},()=>Array(n).fill('0'))});
-            return;
-          }
-        }
-      }
 
       let total = 0n;
       let counts = Array.from({length:m},()=>Array(n).fill(0n));
@@ -281,48 +270,48 @@ function initSolver() {
       let useCountB = new Array(n).fill(0);
       let doubleManUsed = false;
 
-      function dfs(aIdx){
-        if(aIdx === m){
+      function dfs(aIdx) {
+        // Pruning (Abbruch-Logik)
+        for(const nt of nights) {
+          let hits = 0, undecided = 0;
+          for(const pair of nt.pairs) {
+            if(pair.aIdx < aIdx) { if(assign[pair.aIdx] === pair.bIdx) hits++; }
+            else { undecided++; }
+          }
+          if(hits > nt.beams || hits + undecided < nt.beams) return;
+        }
+
+        if(aIdx === m) {
           if(!doubleManUsed) return;
-          for(const nt of nights){
-            let hits = 0;
-            for(const pair of nt.pairs){
-              if(pair.aIdx < 0 || pair.bIdx < 0) continue;
-              if(assign[pair.aIdx] === pair.bIdx) hits++;
-            }
-            if(hits !== nt.beams) return;
-          }
           total++;
-          for(let i=0;i<m;i++){
-            const b = assign[i];
-            if(b >= 0) counts[i][b]++;
-          }
+          for(let i=0; i<m; i++) { if(assign[i] >= 0) counts[i][assign[i]]++; }
           return;
         }
 
         const forceB = forced[aIdx];
-        for(let b=0;b<n;b++){
+        // Wenn aIdx 0 ist, rechnen wir NUR den zugewiesenen Mann (startBIdx)
+        const start = (aIdx === 0) ? startBIdx : 0;
+        const end = (aIdx === 0) ? startBIdx : n - 1;
+
+        for(let b = start; b <= end; b++) {
           if(forbidden[aIdx].has(b)) continue;
           if(forceB !== -1 && forceB !== b) continue;
-          if(useCountB[b] >= 2) continue;
-          if(useCountB[b] === 1 && doubleManUsed) continue;
+          const isSecond = (useCountB[b] === 1);
+          if(useCountB[b] >= 2 || (isSecond && doubleManUsed)) continue;
 
           const prevDouble = doubleManUsed;
+          if(isSecond) doubleManUsed = true;
           useCountB[b]++;
-          if(useCountB[b] === 2) doubleManUsed = true;
           assign[aIdx] = b;
-          dfs(aIdx+1);
+          dfs(aIdx + 1);
           assign[aIdx] = -1;
-          if(useCountB[b] === 2) doubleManUsed = prevDouble;
           useCountB[b]--;
+          doubleManUsed = prevDouble;
         }
       }
+
       dfs(0);
-      self.postMessage({
-        type:'result',
-        total: total.toString(),
-        counts: counts.map(r=>r.map(c=>c.toString()))
-      });
+      self.postMessage({ total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString())) });
     };
   `;
 
@@ -332,42 +321,64 @@ function initSolver() {
   solveBtn.onclick = () => {
     const {A, B} = getT(); if(A.length < 2) return alert("Daten unvollständig!");
     showOverlay();
-    const worker = new Worker(workerUrl);
-    worker.postMessage({
-      A, B, 
-      M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), 
-      Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")
-    });
     
-    worker.onmessage = (e) => {
-      const total = BigInt(e.data.total);
-      const counts = e.data.counts.map(r=>r.map(c=>BigInt(c)));
-      summaryBox.innerHTML = "<h3>Ergebnis</h3><div>" + (total === 0n ? "Keine Kombination gefunden" : total.toString() + " Kombinationen") + "</div>";
-      
-      let html = '<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>';
-      B.forEach(nameB => { html += '<th>' + nameB + '</th>'; });
-      html += '</tr>';
-      
-      A.forEach((nameA, i) => {
-        html += '<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">' + nameA + '</td>';
-        B.forEach((nameB, j) => {
-          const count = counts[i][j];
-          const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
-          if (p >= 100) {
-            html += '<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>';
-          } else if (count === 0n) {
-            html += '<td class="no-match" style="color:#444;font-size:10px;">No Match</td>';
-          } else {
-            const hue = 260 - (p * 2.5);
-            html += '<td style="background:hsl(' + hue + ',70%,25%);color:white;text-align:center;font-size:11px;">' + p.toFixed(2) + '%</td>';
-          }
-        });
-        html += '</tr>';
+    const numWorkers = B.length; // Wir starten einen Task pro Mann für die erste Frau
+    let completed = 0;
+    let finalTotal = 0n;
+    let finalCounts = Array.from({length:A.length},()=>Array(B.length).fill(0n));
+
+    for (let i = 0; i < numWorkers; i++) {
+      const worker = new Worker(workerUrl);
+      worker.postMessage({
+        A, B, startBIdx: i,
+        M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"),
+        Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")
       });
-      matrixBox.innerHTML = html + "</table></div>";
-      matrixBox.style.display = "block";
-      hideOverlay();
-      worker.terminate();
-    };
+
+      worker.onmessage = (e) => {
+        finalTotal += BigInt(e.data.total);
+        e.data.counts.forEach((row, rIdx) => {
+          row.forEach((val, cIdx) => { finalCounts[rIdx][cIdx] += BigInt(val); });
+        });
+
+        completed++;
+        // Fortschrittsbalken aktualisieren
+        const percent = Math.round((completed / numWorkers) * 100);
+        const bar = document.querySelector('#overlay .progress .bar');
+        if (bar) bar.style.width = percent + "%";
+        const status = document.querySelector('#overlay .status-text') || document.querySelector('#overlay div');
+        if (status) status.textContent = `Berechnung läuft... (${percent}%)`;
+
+        worker.terminate();
+
+        if (completed === numWorkers) {
+          renderResults(finalTotal, finalCounts, A, B);
+          hideOverlay();
+        }
+      };
+    }
   };
+
+  function renderResults(total, counts, A, B) {
+    summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total === 0n ? "Keine Kombi gefunden" : total.toString() + " Kombinationen"}</div>`;
+    let html = '<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>';
+    B.forEach(nameB => { html += `<th>${nameB}</th>`; });
+    html += '</tr>';
+    A.forEach((nameA, i) => {
+      html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${nameA}</td>`;
+      B.forEach((nameB, j) => {
+        const count = counts[i][j];
+        const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
+        if (p >= 100) html += '<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>';
+        else if (count === 0n) html += '<td class="no-match" style="color:#444;font-size:10px;">No Match</td>';
+        else {
+          const hue = 260 - (p * 2.5);
+          html += `<td style="background:hsl(${hue},70%,25%);color:white;text-align:center;font-size:11px;">${p.toFixed(2)}%</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+    matrixBox.innerHTML = html + "</table></div>";
+    matrixBox.style.display = "block";
+  }
 }

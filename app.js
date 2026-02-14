@@ -337,83 +337,70 @@ self.onmessage = function(e) {
       hideOverlay();
       worker.terminate();
     };
-  };
-  /* === 💾 Daten-Sicherung (Export & Import) === */
+  };/* === 💾 Daten-Sicherung (Export & Import) === */
+document.addEventListener("DOMContentLoaded", () => {
+  const exportBtn = document.getElementById("exportBtn");
+  const importBtn = document.getElementById("importBtn");
+  const importFile = document.getElementById("importFile");
+  const resetBtn = document.getElementById("resetBtn");
 
-// Hilfsfunktion: Alle App-Daten sammeln
-function getFullAppData() {
-  return {
-    teilnehmer: JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[], "B":[]}'),
-    matchbox: JSON.parse(localStorage.getItem("aytoMatchbox") || "[]"),
-    nights: JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]")
-  };
-}
+  // EXPORT: Erstellt eine JSON-Datei aus allen LocalStorage-Daten
+  if (exportBtn) {
+    exportBtn.onclick = () => {
+      const data = {
+        teilnehmer: JSON.parse(localStorage.getItem("aytoTeilnehmer") || '{"A":[], "B":[]}'),
+        matchbox: JSON.parse(localStorage.getItem("aytoMatchbox") || "[]"),
+        nights: JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]")
+      };
+      
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      
+      const timestamp = new Date().toLocaleDateString('de-DE').replace(/\./g, '-');
+      a.href = url;
+      a.download = `AYTO_Backup_${timestamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  }
 
-// EXPORT: Erstellt eine .json Datei und triggert den Download
-function exportData() {
-  const data = JSON.stringify(getFullAppData(), null, 2);
-  const blob = new Blob([data], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  
-  const a = document.createElement("a");
-  const date = new Date().toISOString().split('T')[0];
-  a.href = url;
-  a.download = `AYTO_Backup_${date}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+  // IMPORT: Öffnet den Datei-Dialog
+  if (importBtn && importFile) {
+    importBtn.onclick = () => importFile.click();
 
-// IMPORT: Liest eine Datei ein und überschreibt den LocalStorage
-function importData() {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".json";
-  
-  input.onchange = e => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = event => {
-      try {
-        const imported = JSON.parse(event.target.result);
-        
-        // Validierung & Speichern
-        if (imported.teilnehmer) localStorage.setItem("aytoTeilnehmer", JSON.stringify(imported.teilnehmer));
-        if (imported.matchbox) localStorage.setItem("aytoMatchbox", JSON.stringify(imported.matchbox));
-        if (imported.nights) localStorage.setItem("aytoMatchingNights", JSON.stringify(imported.nights));
-        
-        alert("Daten erfolgreich importiert! Die App wird neu geladen.");
-        location.reload(); 
-      } catch (err) {
-        alert("Fehler beim Importieren: Ungültige Datei.");
+    importFile.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const imported = JSON.parse(event.target.result);
+          
+          // Daten in den LocalStorage schreiben
+          if (imported.teilnehmer) localStorage.setItem("aytoTeilnehmer", JSON.stringify(imported.teilnehmer));
+          if (imported.matchbox) localStorage.setItem("aytoMatchbox", JSON.stringify(imported.matchbox));
+          if (imported.nights) localStorage.setItem("aytoMatchingNights", JSON.stringify(imported.nights));
+          
+          alert("Daten erfolgreich importiert!");
+          location.reload(); // Seite neu laden, um Daten anzuzeigen
+        } catch (err) {
+          alert("Fehler: Ungültige Datei-Format.");
+          console.error(err);
+        }
+      };
+      reader.readAsText(file);
+    };
+  }
+
+  // RESET: Alles löschen
+  if (resetBtn) {
+    resetBtn.onclick = () => {
+      if (confirm("Möchtest du wirklich ALLE Daten (Teilnehmer, Nächte, Matchbox) löschen?")) {
+        localStorage.clear();
+        location.reload();
       }
     };
-    reader.readAsText(file);
-  };
-  input.click();
-}
-
-// RESET: Löscht alle Daten (für den roten Button)
-function resetData() {
-  if(confirm("Möchtest du wirklich alle Daten löschen? Dies kann nicht rückgängig gemacht werden.")) {
-    localStorage.clear();
-    location.reload();
   }
-}
-
-// Event-Listener an die Buttons binden (innerhalb oder nach DOMContentLoaded)
-document.addEventListener("DOMContentLoaded", () => {
-  const btnExport = document.querySelector('button[onclick="exportData()"]') || document.getElementById('exportBtn');
-  const btnImport = document.querySelector('button[onclick="importData()"]') || document.getElementById('importBtn');
-  const btnReset = document.querySelector('button.danger[style*="background-color: #d32f2f"]') || document.querySelector('button[onclick="resetData()"]');
-
-  // Falls du IDs in deinem HTML hast, nutze diese, sonst binden wir sie hier manuell:
-  // Beispiel für die Buttons aus deinem Screenshot:
-  const footerButtons = document.querySelectorAll('.card .row button');
-  footerButtons.forEach(btn => {
-    if (btn.textContent.includes("Export")) btn.onclick = exportData;
-    if (btn.textContent.includes("Import")) btn.onclick = importData;
-    if (btn.textContent.includes("Zurücksetzen")) btn.onclick = resetData;
-  });
 });
-
-}

@@ -98,35 +98,78 @@ if(nav){
     }
   }
 
-  /* --- 💞 Matchbox --- */
-  const tbA = document.getElementById("tbA"), tbB = document.getElementById("tbB"), tbList = document.getElementById("tbList");
-  if(tbA && tbB) {
-    const refreshMBOptions = () => {
-      const {A, B} = getT();
-      tbA.innerHTML = '<option value="">— A auswählen —</option>' + A.map(n=>`<option>${n}</option>`).join("");
-      tbB.innerHTML = '<option value="">— B auswählen —</option>' + B.map(n=>`<option>${n}</option>`).join("");
-    };
-    const renderMB = () => {
-      const mb = JSON.parse(localStorage.getItem("aytoMatchbox") || "[]");
-      tbList.innerHTML = mb.length ? "" : "<div class='small muted'>Noch keine Einträge</div>";
-      mb.forEach((m, i) => {
-        const tag = m.type==="PM"?"good":m.type==="NM"?"bad":"neutral";
-        const div = document.createElement("div"); div.className="row";
-        div.innerHTML = `<div style="flex:1">${m.A} × ${m.B} <span class="tag ${tag}">${m.type}</span></div><button class="danger small">✖</button>`;
-        div.querySelector("button").onclick = () => { mb.splice(i, 1); localStorage.setItem("aytoMatchbox", JSON.stringify(mb)); renderMB(); };
-        tbList.appendChild(div);
-      });
-    };
-    document.getElementById("addTB").onclick = () => {
-      if(!tbA.value || !tbB.value) return alert("Bitte A und B wählen");
-      const mb = JSON.parse(localStorage.getItem("aytoMatchbox") || "[]");
-      mb.push({A: tbA.value, B: tbB.value, type: document.getElementById("tbType").value});
-      localStorage.setItem("aytoMatchbox", JSON.stringify(mb));
-      renderMB();
-    };
-    document.addEventListener("teilnehmerChanged", refreshMBOptions);
-    refreshMBOptions(); renderMB();
-  }
+/* --- 💞 Matchbox --- */
+const tbA = document.getElementById("tbA"), 
+      tbB = document.getElementById("tbB"), 
+      tbList = document.getElementById("tbList");
+
+if(tbA && tbB) {
+  const refreshMBOptions = () => {
+    const {A, B} = getT();
+    tbA.innerHTML = '<option value="">— A auswählen —</option>' + A.map(n=>`<option>${n}</option>`).join("");
+    tbB.innerHTML = '<option value="">— B auswählen —</option>' + B.map(n=>`<option>${n}</option>`).join("");
+  };
+
+  const renderMB = () => {
+    const mb = JSON.parse(localStorage.getItem("aytoMatchbox") || "[]");
+    tbList.innerHTML = mb.length ? "" : "<div class='small muted'>Noch keine Einträge</div>";
+    
+    mb.forEach((m, i) => {
+      // Logik für die Anzeige (Text & CSS-Klasse)
+      let tagClass = "";
+      let fullText = "";
+
+      if (m.type === "PM") {
+        tagClass = "pm";
+        fullText = "Perfect Match";
+      } else if (m.type === "NM") {
+        tagClass = "nm";
+        fullText = "No Match";
+      } else if (m.type === "SOLD") {
+        tagClass = "sold";
+        fullText = "Verkauft";
+      } else {
+        tagClass = "neutral";
+        fullText = m.type;
+      }
+
+      const div = document.createElement("div"); 
+      div.className = "row";
+      // Wir nutzen hier das Flex-Layout für die saubere Trennung von Text und Button
+      div.innerHTML = `
+        <div style="flex:1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span><b>${m.A}</b> × <b>${m.B}</b></span>
+          <span class="tag ${tagClass}">${fullText}</span>
+        </div>
+        <button class="danger small">✖</button>
+      `;
+
+      div.querySelector("button").onclick = () => { 
+        mb.splice(i, 1); 
+        localStorage.setItem("aytoMatchbox", JSON.stringify(mb)); 
+        renderMB(); 
+      };
+      tbList.appendChild(div);
+    });
+  };
+
+  document.getElementById("addTB").onclick = () => {
+    if(!tbA.value || !tbB.value) return alert("Bitte A und B wählen");
+    const mb = JSON.parse(localStorage.getItem("aytoMatchbox") || "[]");
+    mb.push({
+      A: tbA.value, 
+      B: tbB.value, 
+      type: document.getElementById("tbType").value
+    });
+    localStorage.setItem("aytoMatchbox", JSON.stringify(mb));
+    renderMB();
+  };
+
+  document.addEventListener("teilnehmerChanged", refreshMBOptions);
+  refreshMBOptions(); 
+  renderMB();
+}
+
 
   /* --- 🌙 Matching Nights --- */
   const addNightBtn = document.getElementById("addNight"), nightsList = document.getElementById("nights");

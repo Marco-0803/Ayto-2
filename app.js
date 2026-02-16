@@ -217,9 +217,12 @@ if(nav){
 
 /* === 🔮 Orakel-Logik === */
 function renderOrakel() {
-  const orakelBox = document.getElementById("nights"); // Wir nutzen den Container der Nights-Seite
+  // ✅ KORRIGIERT: Zielt jetzt auf orakelBox (Seite 4) statt nights (Seite 3)
+  const orakelBox = document.getElementById("orakelBox"); 
   const matrixContainer = document.getElementById("matrix");
   
+  if (!orakelBox) return; // Sicherheit, falls die ID fehlt
+
   if (!matrixContainer || !matrixContainer.innerHTML || matrixContainer.innerHTML.includes("display: none")) {
     orakelBox.innerHTML = `
       <div class="card stack" style="text-align:center; padding: 40px 20px;">
@@ -230,7 +233,6 @@ function renderOrakel() {
     return;
   }
 
-  // Daten aus der Tabelle extrahieren
   let pairs = [];
   const rows = matrixContainer.querySelectorAll("tr");
   if(rows.length < 2) return;
@@ -246,7 +248,6 @@ function renderOrakel() {
       if (val === "MATCH" || val === "FIXED") prob = 100;
       else if (val === "No Match") prob = 0;
       else prob = parseFloat(val.replace("%", ""));
-      
       pairs.push({ nameA, nameB, prob });
     }
   }
@@ -255,7 +256,6 @@ function renderOrakel() {
   const deadPairs = pairs.filter(p => p.prob === 0).slice(0, 12);
 
   let html = `<h2 style="margin-bottom:20px">🔮 Match-Orakel</h2>`;
-  
   html += `
     <div class="card stack" style="border-top: 4px solid #ffd700;">
       <strong style="color:#ffd700; text-transform: uppercase; font-size: 12px;">🔥 Heißeste Tipps (Top 5)</strong>

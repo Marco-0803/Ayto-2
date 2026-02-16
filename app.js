@@ -208,6 +208,75 @@ document.addEventListener("DOMContentLoaded", () => {
   initSolver();
 });
 
+/* === 🔮 Orakel-Logik === */
+function renderOrakel() {
+  const orakelBox = document.getElementById("nights"); // Wir nutzen den Container der Nights-Seite
+  const matrixContainer = document.getElementById("matrix");
+  
+  if (!matrixContainer || !matrixContainer.innerHTML || matrixContainer.innerHTML.includes("display: none")) {
+    orakelBox.innerHTML = `
+      <div class="card stack" style="text-align:center; padding: 40px 20px;">
+        <div style="font-size: 40px; margin-bottom: 10px;">🔮</div>
+        <h3>Das Orakel schläft noch...</h3>
+        <p class="small muted">Berechne zuerst die Ergebnisse im Home-Tab, damit ich die Daten analysieren kann!</p>
+      </div>`;
+    return;
+  }
+
+  // Daten aus der Tabelle extrahieren
+  let pairs = [];
+  const rows = matrixContainer.querySelectorAll("tr");
+  if(rows.length < 2) return;
+  const headers = Array.from(rows[0].querySelectorAll("th")).map(th => th.innerText);
+
+  for (let i = 1; i < rows.length; i++) {
+    const cells = rows[i].querySelectorAll("td");
+    const nameA = cells[0].innerText;
+    for (let j = 1; j < cells.length; j++) {
+      const nameB = headers[j];
+      const val = cells[j].innerText;
+      let prob = 0;
+      if (val === "MATCH" || val === "FIXED") prob = 100;
+      else if (val === "No Match") prob = 0;
+      else prob = parseFloat(val.replace("%", ""));
+      
+      pairs.push({ nameA, nameB, prob });
+    }
+  }
+
+  const topPairs = pairs.filter(p => p.prob > 0).sort((a, b) => b.prob - a.prob).slice(0, 5);
+  const deadPairs = pairs.filter(p => p.prob === 0).slice(0, 12);
+
+  let html = `<h2 style="margin-bottom:20px">🔮 Match-Orakel</h2>`;
+  
+  html += `
+    <div class="card stack" style="border-top: 4px solid #ffd700;">
+      <strong style="color:#ffd700; text-transform: uppercase; font-size: 12px;">🔥 Heißeste Tipps (Top 5)</strong>
+      <div class="stack" style="margin-top:10px">
+        ${topPairs.map((p, i) => `
+          <div class="row" style="justify-content:space-between; background: rgba(255,215,0,0.05); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.1)">
+            <span><span style="opacity:0.5; margin-right:8px;">#${i+1}</span> <b>${p.nameA} & ${p.nameB}</b></span>
+            <span style="color:#ffd700; font-weight:bold">${p.prob === 100 ? 'MATCH' : p.prob.toFixed(1) + '%'}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>`;
+
+  html += `
+    <div class="card stack" style="border-top: 4px solid #ff4f4f;">
+      <strong style="color:#ff4f4f; text-transform: uppercase; font-size: 12px;">❄️ Kälter als Eis (0%)</strong>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top:10px">
+        ${deadPairs.map(p => `
+          <div style="font-size:11px; background: rgba(255,79,79,0.05); padding: 5px 8px; border-radius: 5px; color: #aaa;">
+            ${p.nameA} × ${p.nameB}
+          </div>
+        `).join("")}
+      </div>
+    </div>`;
+
+  orakelBox.innerHTML = html;
+}
+
 /* === 📊 Solver & Simulator === */
 function toggleVirtualMatch(nameA, nameB) {
   const index = virtualMatches.findIndex(vm => vm.A === nameA && vm.B === nameB);

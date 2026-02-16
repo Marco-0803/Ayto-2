@@ -76,9 +76,12 @@
     </section>
 
     <section id="page-nights" class="page">
-      <div class="card stack">
-        <h2>🕒 Timeline</h2>
-        <div class="timeline" id="timelineBox"></div>
+      <div id="orakelBox" class="stack">
+        <div class="card stack" style="text-align:center; padding: 30px;">
+          <div style="font-size: 3rem;">🔮</div>
+          <h2 style="margin:10px 0">Match-Orakel</h2>
+          <p class="small muted">Berechne zuerst die Ergebnisse, um die Analyse zu sehen.</p>
+        </div>
       </div>
     </section>
 
@@ -100,26 +103,10 @@
     <button class="active" data-target="page-teilnehmer"><span class="icon">👥</span>Teilnehmer</button>
     <button data-target="page-matchbox"><span class="icon">💞</span>Matchbox</button>
     <button data-target="page-entscheidungen"><span class="icon">🌙</span>Matchingnight</button>
-    <button data-target="page-nights"><span class="icon">🕒</span>Nights</button>
+    <button data-target="page-nights"><span class="icon">🔮</span>Orakel</button>
     <button data-target="page-ergebnisse"><span class="icon">📊</span>Ergebnisse</button>
   </nav>
 
-  <!-- ✅ Neuer Overlay-Bereich mit Prozentanzeige -->
-
-
-  <script src="app.js"></script>
-  <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-      navigator.serviceWorker.register('service-worker.js').catch(function(e){
-        console.log('SW registration failed', e);
-      });
-    });
-  }
-  </script>
-
-  <!-- Screenshot-Export (html2canvas Bibliothek) -->
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <div id="overlay">
     <div class="overlay-box">
       <img class="overlay-logo" src="HeaderIcon.png" alt="Are You The One Logo">
@@ -131,8 +118,15 @@
   </div>
 
   <script src="app.js"></script>
-</body>
-</html>
-
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('service-worker.js').catch(function(e){
+        console.log('SW registration failed', e);
+      });
+    });
+  }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </body>
 </html>

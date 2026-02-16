@@ -53,19 +53,26 @@ function createPersonUI(name, group, listId) {
 /* === 🚀 Haupt-Initialisierung === */
 document.addEventListener("DOMContentLoaded", () => {
   
-  /* --- 🌐 Navigation --- */
-  const nav = document.getElementById('nav');
-  const pages = document.querySelectorAll('.page');
-  if(nav){
-    nav.addEventListener('click', (e)=>{
-      const btn = e.target.closest('button'); if(!btn) return;
-      document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      const id = btn.getAttribute('data-target');
-      pages.forEach(p=> p.classList.toggle('active', p.id===id));
-      window.scrollTo({top:0, behavior:'smooth'});
-    });
-  }
+/* --- 🌐 Navigation --- */
+const nav = document.getElementById('nav');
+const pages = document.querySelectorAll('.page');
+if(nav){
+  nav.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const id = btn.getAttribute('data-target');
+    pages.forEach(p=> p.classList.toggle('active', p.id===id));
+    
+    // NEU: Wenn die Nights/Orakel Seite geöffnet wird, Orakel rendern
+    if(id === 'page-nights') {
+      renderOrakel();
+    }
+    
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+}
+
 
   /* --- 👥 Teilnehmer & Prefill --- */
   const listA = document.getElementById("listA"), listB = document.getElementById("listB");

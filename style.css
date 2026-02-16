@@ -244,3 +244,25 @@ input[type="text"], select {
   gap: 8px;
   margin-bottom: 8px;
 }
+/* ✨ Orakel Puls-Effekt */
+@keyframes oracleGlow {
+  0% { box-shadow: 0 0 5px rgba(52, 111, 255, 0.2); transform: scale(1); }
+  50% { box-shadow: 0 0 20px rgba(52, 111, 255, 0.6); transform: scale(1.02); }
+  100% { box-shadow: 0 0 5px rgba(52, 111, 255, 0.2); transform: scale(1); }
+}
+
+@keyframes goldPulse {
+  0% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.3); border-color: #ffd700; }
+  50% { box-shadow: 0 0 25px rgba(255, 215, 0, 0.8); border-color: #fff; }
+  100% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.3); border-color: #ffd700; }
+}
+
+.oracle-card {
+  transition: all 0.3s ease;
+  animation: oracleGlow 3s infinite ease-in-out;
+}
+
+.oracle-card.perfect-match {
+  animation: goldPulse 2s infinite ease-in-out !important;
+  border: 2px solid #ffd700 !important;
+}

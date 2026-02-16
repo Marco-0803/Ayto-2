@@ -217,11 +217,10 @@ if(nav){
 
 /* === 🔮 Orakel-Logik === */
 function renderOrakel() {
-  // ✅ KORRIGIERT: Zielt jetzt auf orakelBox (Seite 4) statt nights (Seite 3)
   const orakelBox = document.getElementById("orakelBox"); 
   const matrixContainer = document.getElementById("matrix");
   
-  if (!orakelBox) return; // Sicherheit, falls die ID fehlt
+  if (!orakelBox) return;
 
   if (!matrixContainer || !matrixContainer.innerHTML || matrixContainer.innerHTML.includes("display: none")) {
     orakelBox.innerHTML = `
@@ -256,14 +255,18 @@ function renderOrakel() {
   const deadPairs = pairs.filter(p => p.prob === 0).slice(0, 12);
 
   let html = `<h2 style="margin-bottom:20px">🔮 Match-Orakel</h2>`;
+  
   html += `
     <div class="card stack" style="border-top: 4px solid #ffd700;">
       <strong style="color:#ffd700; text-transform: uppercase; font-size: 12px;">🔥 Heißeste Tipps (Top 5)</strong>
       <div class="stack" style="margin-top:10px">
         ${topPairs.map((p, i) => `
-          <div class="row" style="justify-content:space-between; background: rgba(255,215,0,0.05); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.1)">
+          <div class="row oracle-card ${p.prob === 100 ? 'perfect-match' : ''}" 
+               style="justify-content:space-between; background: rgba(52, 111, 255, 0.1); padding: 12px; border-radius: 10px; margin-bottom: 8px;">
             <span><span style="opacity:0.5; margin-right:8px;">#${i+1}</span> <b>${p.nameA} & ${p.nameB}</b></span>
-            <span style="color:#ffd700; font-weight:bold">${p.prob === 100 ? 'MATCH' : p.prob.toFixed(1) + '%'}</span>
+            <span style="color:${p.prob === 100 ? '#ffd700' : '#346FFF'}; font-weight:bold">
+              ${p.prob === 100 ? 'MATCH' : p.prob.toFixed(1) + '%'}
+            </span>
           </div>
         `).join("")}
       </div>
@@ -283,6 +286,7 @@ function renderOrakel() {
 
   orakelBox.innerHTML = html;
 }
+
 
 /* === 📊 Solver & Simulator === */
 function toggleVirtualMatch(nameA, nameB) {

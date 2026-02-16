@@ -266,3 +266,53 @@ input[type="text"], select {
   animation: goldPulse 2s infinite ease-in-out !important;
   border: 2px solid #ffd700 !important;
 }
+/* === 9. Visuelle Matchbox-Tags (Ausgeschrieben) === */
+.tag {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: bold;
+  margin-left: 8px;
+  text-transform: uppercase;
+  display: inline-block;
+  white-space: nowrap;
+  vertical-align: middle;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Perfect Match: Grün */
+.tag.pm { 
+  background: #28a745; 
+  color: #fff; 
+}
+
+/* No Match: Rot */
+.tag.nm { 
+  background: #dc3545; 
+  color: #fff; 
+}
+
+/* Verkauft: Grau */
+.tag.sold { 
+  background: #6c757d; 
+  color: #fff; 
+}
+
+/* Optimierung der Matchbox-Zeilen */
+#tbList .row {
+  justify-content: space-between; 
+  padding: 10px; 
+  border-bottom: 1px solid rgba(255,255,255,0.1); 
+  align-items: center;
+  background: rgba(255,255,255,0.02);
+  margin-bottom: 4px;
+  border-radius: 4px;
+}
+
+#tbList b {
+  color: #4a82ff; /* Hebt die Namen farblich leicht hervor */
+}
+
+
+
+

@@ -14,19 +14,23 @@
 
 /* === 🛠 Globale Helfer & Daten-Management === */
 const STORAGE_KEY_T = "aytoTeilnehmer";
+let virtualMatches = []; // Speicher für den Simulator
+
 function getT() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY_T)) || {A:[], B:[]}; } catch(e) { return {A:[], B:[]}; } }
 function saveT(data) { localStorage.setItem(STORAGE_KEY_T, JSON.stringify(data)); document.dispatchEvent(new Event("teilnehmerChanged")); }
 
 function showOverlay(){
-  const ov=document.getElementById('overlay');
+  const ov = document.getElementById('overlay');
   if(ov){ 
     ov.classList.add('show'); 
-    const bar = ov.querySelector('.progress .bar'); 
+    const bar = ov.querySelector('.bar'); 
+    const status = ov.querySelector('.status-text');
     if(bar) bar.style.width = "0%"; 
+    if(status) status.textContent = "Berechnung läuft... (0%)";
   }
 }
 function hideOverlay(){
-  const ov=document.getElementById('overlay'); if(ov) ov.classList.remove('show');
+  const ov = document.getElementById('overlay'); if(ov) ov.classList.remove('show');
 }
 
 /* === 👥 Teilnehmer-Verwaltung === */
@@ -176,102 +180,69 @@ document.addEventListener("DOMContentLoaded", () => {
     renderNights();
   }
 
-  /* --- 💾 Daten-Sicherung (Export, Import & Reset) --- */
-  const exportBtn = document.getElementById("exportBtn");
-  const importBtn = document.getElementById("importBtn");
-  const importFile = document.getElementById("importFile");
-  const resetBtn = document.getElementById("resetBtn");
-
+  /* --- 💾 Daten-Sicherung --- */
+  const exportBtn = document.getElementById("exportBtn"), importBtn = document.getElementById("importBtn"), importFile = document.getElementById("importFile"), resetBtn = document.getElementById("resetBtn");
   if (exportBtn) {
     exportBtn.onclick = () => {
-      const data = {
-        teilnehmer: getT(),
-        matchbox: JSON.parse(localStorage.getItem("aytoMatchbox") || "[]"),
-        nights: JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]")
-      };
+      const data = { teilnehmer: getT(), matchbox: JSON.parse(localStorage.getItem("aytoMatchbox") || "[]"), nights: JSON.parse(localStorage.getItem("aytoMatchingNights") || "[]") };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const timestamp = new Date().toLocaleDateString('de-DE').replace(/\./g, '-');
-      a.href = url;
-      a.download = `AYTO_Backup_${timestamp}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `AYTO_Backup.json`; a.click();
     };
   }
-
-  if (importBtn && importFile) {
+  if (importBtn) {
     importBtn.onclick = () => importFile.click();
     importFile.onchange = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
       const reader = new FileReader();
       reader.onload = (ev) => {
-        try {
-          const imported = JSON.parse(ev.target.result);
-          if (imported.teilnehmer) localStorage.setItem(STORAGE_KEY_T, JSON.stringify(imported.teilnehmer));
-          if (imported.matchbox) localStorage.setItem("aytoMatchbox", JSON.stringify(imported.matchbox));
-          if (imported.nights) localStorage.setItem("aytoMatchingNights", JSON.stringify(imported.nights));
-          alert("Erfolgreich importiert!");
-          location.reload();
-        } catch (err) { alert("Import-Fehler! Ungültige Datei."); }
-      };
-      reader.readAsText(file);
-    };
-  }
-
-  if (resetBtn) {
-    resetBtn.onclick = () => {
-      if (confirm("Möchtest du wirklich alle Daten löschen?")) {
-        localStorage.clear();
+        const imported = JSON.parse(ev.target.result);
+        localStorage.setItem(STORAGE_KEY_T, JSON.stringify(imported.teilnehmer));
+        localStorage.setItem("aytoMatchbox", JSON.stringify(imported.matchbox));
+        localStorage.setItem("aytoMatchingNights", JSON.stringify(imported.nights));
         location.reload();
-      }
+      };
+      reader.readAsText(e.target.files[0]);
     };
   }
+  if (resetBtn) resetBtn.onclick = () => { if (confirm("Alles löschen?")) { localStorage.clear(); location.reload(); } };
 
   initSolver();
+});
 
-}); // Ende Haupt-Initialisierung
+/* === 📊 Solver & Simulator === */
+function toggleVirtualMatch(nameA, nameB) {
+  const index = virtualMatches.findIndex(vm => vm.A === nameA && vm.B === nameB);
+  if (index > -1) {
+    virtualMatches.splice(index, 1);
+  } else {
+    virtualMatches = virtualMatches.filter(vm => vm.A !== nameA);
+    virtualMatches.push({A: nameA, B: nameB, type: "PM"});
+  }
+  document.getElementById("solveBtn").click();
+}
 
-/* === 📊 Solver === */function initSolver() {
-  const solveBtn = document.getElementById("solveBtn"),
-        summaryBox = document.getElementById("summary"),
-        matrixBox = document.getElementById("matrix");
+function initSolver() {
+  const solveBtn = document.getElementById("solveBtn"), summaryBox = document.getElementById("summary"), matrixBox = document.getElementById("matrix");
   if (!solveBtn) return;
 
-  // Der Worker-Code bleibt im Kern gleich, rechnet aber nur einen Teilbereich
   const workerCode = `
     self.onmessage = function(e) {
       const { A, B, M, Nraw, startBIdx } = e.data;
-      const idxA = Object.fromEntries(A.map((n,i)=>[n,i]));
-      const idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
+      const idxA = Object.fromEntries(A.map((n,i)=>[n,i])), idxB = Object.fromEntries(B.map((n,i)=>[n,i]));
       const m = A.length, n = B.length;
-
-      const forced = Array(m).fill(-1);
-      const forbidden = Array.from({length:m}, ()=>new Set());
+      const forced = Array(m).fill(-1), forbidden = Array.from({length:m}, ()=>new Set());
       M.forEach(t => {
         if(!(t.A in idxA) || !(t.B in idxB)) return;
         const a = idxA[t.A], b = idxB[t.B];
         if(t.type === "PM") forced[a] = b;
         else if(t.type === "NM") forbidden[a].add(b);
       });
-
       const nights = (Nraw || []).map(nObj => ({
-        pairs: (nObj.pairs || []).map(p => ({
-          aIdx: (p.A in idxA) ? idxA[p.A] : -1,
-          bIdx: (p.B === "keine") ? -1 : ((p.B in idxB) ? idxB[p.B] : -2)
-        })).filter(p => p.aIdx !== -1),
+        pairs: (nObj.pairs || []).map(p => ({ aIdx: (p.A in idxA) ? idxA[p.A] : -1, bIdx: (p.B === "keine") ? -1 : ((p.B in idxB) ? idxB[p.B] : -2) })).filter(p => p.aIdx !== -1),
         beams: Number(nObj.lights)
       }));
-
-      let total = 0n;
-      let counts = Array.from({length:m},()=>Array(n).fill(0n));
-      let assign = Array(m).fill(-1);
-      let useCountB = new Array(n).fill(0);
-      let doubleManUsed = false;
+      let total = 0n, counts = Array.from({length:m},()=>Array(n).fill(0n)), assign = Array(m).fill(-1), useCountB = new Array(n).fill(0), doubleManUsed = false;
 
       function dfs(aIdx) {
-        // Pruning (Abbruch-Logik)
         for(const nt of nights) {
           let hits = 0, undecided = 0;
           for(const pair of nt.pairs) {
@@ -280,36 +251,24 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           if(hits > nt.beams || hits + undecided < nt.beams) return;
         }
-
         if(aIdx === m) {
           if(!doubleManUsed) return;
           total++;
           for(let i=0; i<m; i++) { if(assign[i] >= 0) counts[i][assign[i]]++; }
           return;
         }
-
-        const forceB = forced[aIdx];
-        // Wenn aIdx 0 ist, rechnen wir NUR den zugewiesenen Mann (startBIdx)
-        const start = (aIdx === 0) ? startBIdx : 0;
-        const end = (aIdx === 0) ? startBIdx : n - 1;
-
+        const forceB = forced[aIdx], start = (aIdx === 0) ? startBIdx : 0, end = (aIdx === 0) ? startBIdx : n - 1;
         for(let b = start; b <= end; b++) {
-          if(forbidden[aIdx].has(b)) continue;
-          if(forceB !== -1 && forceB !== b) continue;
+          if(forbidden[aIdx].has(b) || (forceB !== -1 && forceB !== b)) continue;
           const isSecond = (useCountB[b] === 1);
           if(useCountB[b] >= 2 || (isSecond && doubleManUsed)) continue;
-
           const prevDouble = doubleManUsed;
           if(isSecond) doubleManUsed = true;
-          useCountB[b]++;
-          assign[aIdx] = b;
+          useCountB[b]++; assign[aIdx] = b;
           dfs(aIdx + 1);
-          assign[aIdx] = -1;
-          useCountB[b]--;
-          doubleManUsed = prevDouble;
+          assign[aIdx] = -1; useCountB[b]--; doubleManUsed = prevDouble;
         }
       }
-
       dfs(0);
       self.postMessage({ total: total.toString(), counts: counts.map(r=>r.map(c=>c.toString())) });
     };
@@ -322,59 +281,82 @@ document.addEventListener("DOMContentLoaded", () => {
     const {A, B} = getT(); if(A.length < 2) return alert("Daten unvollständig!");
     showOverlay();
     
-    const numWorkers = B.length; // Wir starten einen Task pro Mann für die erste Frau
-    let completed = 0;
-    let finalTotal = 0n;
-    let finalCounts = Array.from({length:A.length},()=>Array(B.length).fill(0n));
+    const bar = document.querySelector('#overlay .bar');
+    const statusText = document.querySelector('#overlay .status-text');
+    let startTime = Date.now();
+    let duration = 3000;
+
+    let animInterval = setInterval(() => {
+      let elapsed = Date.now() - startTime;
+      let progress = Math.min(Math.round((elapsed / duration) * 100), 99);
+      if (bar) bar.style.width = progress + "%";
+      if (statusText) statusText.textContent = `Berechnung läuft... (${progress}%)`;
+    }, 30);
+
+    const numWorkers = B.length;
+    let completed = 0, finalTotal = 0n, finalCounts = Array.from({length:A.length},()=>Array(B.length).fill(0n));
 
     for (let i = 0; i < numWorkers; i++) {
       const worker = new Worker(workerUrl);
       worker.postMessage({
         A, B, startBIdx: i,
-        M: JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"),
+        M: [...JSON.parse(localStorage.getItem("aytoMatchbox")||"[]"), ...virtualMatches],
         Nraw: JSON.parse(localStorage.getItem("aytoMatchingNights")||"[]")
       });
 
       worker.onmessage = (e) => {
         finalTotal += BigInt(e.data.total);
-        e.data.counts.forEach((row, rIdx) => {
-          row.forEach((val, cIdx) => { finalCounts[rIdx][cIdx] += BigInt(val); });
-        });
-
+        e.data.counts.forEach((row, rIdx) => { row.forEach((val, cIdx) => { finalCounts[rIdx][cIdx] += BigInt(val); }); });
         completed++;
-        // Fortschrittsbalken aktualisieren
-        const percent = Math.round((completed / numWorkers) * 100);
-        const bar = document.querySelector('#overlay .progress .bar');
-        if (bar) bar.style.width = percent + "%";
-        const status = document.querySelector('#overlay .status-text') || document.querySelector('#overlay div');
-        if (status) status.textContent = `Berechnung läuft... (${percent}%)`;
-
         worker.terminate();
 
         if (completed === numWorkers) {
-          renderResults(finalTotal, finalCounts, A, B);
-          hideOverlay();
+          let timeToWait = Math.max(0, duration - (Date.now() - startTime));
+          setTimeout(() => {
+            clearInterval(animInterval);
+            if (bar) bar.style.width = "100%";
+            if (statusText) statusText.textContent = `Berechnung läuft... (100%)`;
+            setTimeout(() => { renderResults(finalTotal, finalCounts, A, B); hideOverlay(); }, 400);
+          }, timeToWait);
         }
       };
     }
   };
 
   function renderResults(total, counts, A, B) {
-    summaryBox.innerHTML = `<h3>Ergebnis</h3><div>${total === 0n ? "Keine Kombi gefunden" : total.toString() + " Kombinationen"}</div>`;
+    let summaryHtml = `<h3>Ergebnis ${virtualMatches.length ? '<span class="tag warning">Simulation</span>' : ''}</h3>
+                       <div>${total === 0n ? "Keine Kombi gefunden" : total.toString() + " Kombinationen"}</div>`;
+    if(virtualMatches.length) summaryHtml += `<button class="small ghost" onclick="virtualMatches=[];document.getElementById('solveBtn').click()">Simulation beenden</button>`;
+    summaryBox.innerHTML = summaryHtml;
+
     let html = '<div class="ayto-table-container"><table class="ayto-table"><tr><th></th>';
     B.forEach(nameB => { html += `<th>${nameB}</th>`; });
     html += '</tr>';
     A.forEach((nameA, i) => {
-      html += `<tr><td class="a-name" style="position:sticky;left:0;background:#23283f;font-weight:bold;z-index:2">${nameA}</td>`;
+      html += `<tr><td class="a-name">${nameA}</td>`;
       B.forEach((nameB, j) => {
         const count = counts[i][j];
         const p = total > 0n ? Number((count * 10000n) / total) / 100 : 0;
-        if (p >= 100) html += '<td style="background:#ffd700;color:#000;font-weight:bold;text-align:center;">MATCH</td>';
-        else if (count === 0n) html += '<td class="no-match" style="color:#444;font-size:10px;">No Match</td>';
-        else {
+        const isVirtual = virtualMatches.find(vm => vm.A === nameA && vm.B === nameB);
+        
+        let style = "";
+        let content = p.toFixed(2) + "%";
+
+        if (isVirtual) {
+          style = "background:#00ffaa;color:#000;font-weight:bold;cursor:pointer;border:2px solid #fff;";
+          content = "FIXED";
+        } else if (p >= 100) {
+          style = "background:#ffd700;color:#000;font-weight:bold;text-align:center;";
+          content = "MATCH";
+        } else if (count === 0n) {
+          style = "background:#2d334a;color:#444;font-size:10px;";
+          content = "No Match";
+        } else {
           const hue = 260 - (p * 2.5);
-          html += `<td style="background:hsl(${hue},70%,25%);color:white;text-align:center;font-size:11px;">${p.toFixed(2)}%</td>`;
+          style = `background:hsl(${hue},70%,25%);color:white;cursor:pointer;`;
         }
+
+        html += `<td style="${style}" onclick="toggleVirtualMatch('${nameA}', '${nameB}')">${content}</td>`;
       });
       html += '</tr>';
     });

@@ -93,7 +93,7 @@ if(nav){
         A.forEach(n => createPersonUI(n, "A", "listA"));
         B.forEach(n => createPersonUI(n, "B", "listB"));
         saveT({A, B});
-        preBtn.textContent = "✅ Staffel 2026 geladen"; preBtn.disabled = true;
+        preBtn.textContent = "✅ Staffel 2026 VIP geladen"; preBtn.disabled = true;
       };
     }
   }

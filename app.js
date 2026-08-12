@@ -87,8 +87,8 @@ if(nav){
     const preBtn = document.getElementById("prefill");
     if(preBtn) {
       preBtn.onclick = () => {
-        const A = ["Adrianna", "Alicia", "Aurora", "Elena", "Ella", "Laura", "Linda", "Marla", "Michelle", "Tiziana", "Tonia"];
-        const B = ["Chris", "Ema", "Evi", "Jeronymo", "Jerry", "Julian.M", "Julian.S", "Luke", "Meji", "Noel"];
+        const A = ["Alexandra", "Christin", "Emma", "Francesca", "Janice", "Jenny", "Julia", "Marta", "Michelle", "Zoe"];
+        const B = ["Bennett", "Brian", "Cansin", "Daymian", "Fabi", "Germain", "Johannes", "Marwin", "Raul", "Robin"];
         listA.innerHTML = ""; listB.innerHTML = "";
         A.forEach(n => createPersonUI(n, "A", "listA"));
         B.forEach(n => createPersonUI(n, "B", "listB"));
